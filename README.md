@@ -1,0 +1,121 @@
+# TCC — Ângulo de deriva como terceira saída MIMO do sensor virtual MGGP
+
+Extensão da IC *"Estimação de Velocidades em Veículos Inteligentes utilizando Programação Genética
+Multigene e Modelo de Bicicleta"* (UFLA, Depto. de Automática). A IC estimou `v_x`, `v_y` a partir de
+IMU + velocidade de rodas com a lib Python `mggp` (5 entradas × 2 saídas). O TCC testa o ângulo de
+deriva `β = atan2(v_y, v_x)` como terceira saída (5×3) contra o `β` pós-calculado do modelo 5×2.
+
+- Contexto da IC: [`CONTEXTO_IC.md`](CONTEXTO_IC.md) · plano completo: [`GOALS.md`](GOALS.md)
+- Resultado do GOALS 1 (o `β` da base é **computado**, não medido): [`docs/slip_angle_provenance.md`](docs/slip_angle_provenance.md)
+- Legenda das 24 colunas do dataset: [`docs/column_inventory.md`](docs/column_inventory.md)
+
+## 1. Dados (não estão no repositório)
+
+A base Wang/Jilin é de parceria e **nunca é commitada** (`Database/` está no `.gitignore`).
+Copie os cinco arquivos para `Database/` na raiz do projeto:
+
+```
+Database/
+  wang21dv_bic_MGGP.xlsx   # treino
+  wang22dv_bic_MGGP.xlsx   # validação
+  wang31dv_bic_MGGP.xlsx   # teste A
+  wang81dv_bic_MGGP.xlsx   # teste B
+  wang32dv_bic_MGGP.xlsx   # teste C (não usado na IC)
+```
+
+Origem: pasta `IC\Database\` do PC principal ou o PC do laboratório. Conferir:
+
+```bash
+python -c "import glob; print(sorted(glob.glob('Database/wang*.xlsx')))"
+```
+
+## 2. Instalar
+
+Precisa de Python **3.12** (a lib da IC está pinada em `numpy 2.2.6` / `numba 0.64`, que não rodam no 3.13+).
+
+### Opção A — `uv` (recomendado; baixa o Python 3.12 e as dependências sozinho)
+
+```bash
+# Windows (PowerShell)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+# Linux / macOS
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+```bash
+git clone https://github.com/alexmiguel011014-stack/tcc.git
+cd tcc
+uv run scripts/run_e2_mimo3.py --help     # primeira execução cria o ambiente (~1 min)
+```
+
+Os scripts têm as dependências declaradas inline (PEP 723): `uv run scripts/<nome>.py` resolve tudo,
+sem `uv sync`. Para os testes/lint do projeto use `uv sync` (lê `pyproject.toml` + `uv.lock`).
+
+### Opção B — `pip` (PC sem `uv`)
+
+```bash
+py -3.12 -m venv .venv            # Windows; Linux: python3.12 -m venv .venv
+.venv\Scripts\activate            # Linux: source .venv/bin/activate
+pip install -r requirements.txt
+python scripts/run_e2_mimo3.py --help
+```
+
+Nos dois casos rode os scripts **a partir da raiz do repositório** (eles procuram `Database/` e `src/` por lá).
+
+## 3. Rodar
+
+### Experimento E2 — 30 treinamentos do T48 em 5×3 (vx, vy, β)
+
+```bash
+uv run scripts/run_e2_mimo3.py --config t48 --arm 5x3 --runs 30
+# sem uv:  python scripts/run_e2_mimo3.py --config t48 --arm 5x3 --runs 30
+```
+
+- Porta do `TrainingMGGP_LOOP.ipynb` da IC: mesma lib, mesmos parâmetros do T48
+  (`nDelays [1,2,5,10,25,50]`, 7 termos, `maxHeight 6`, 300 gerações × 300 indivíduos, MShooting → Free-Run),
+  mesma regra de aprovação (`0 < RMSE(Wang 2.2) < 100`).
+- `--arm 5x2` gera o baseline da IC (braço A) com o mesmo script; `--config t19` usa o modelo eleito da IC.
+- `β` treina em **graus** por padrão (`--beta-unit`): a fitness da lib é a média simples das RMSE por saída,
+  e em rad o `β` seria invisível frente a `v_x`.
+- **Retomável**: caiu a luz, rode o mesmo comando — ele continua do último modelo aprovado
+  (`checklist.csv`) e da última validação concluída.
+- Medir o tempo antes de comprometer dias: `--runs 1` e ler `attempts.csv`.
+
+Saída em `results/e2/t48_5x3_deg/` (ignorado pelo git):
+
+| arquivo | conteúdo |
+|---|---|
+| `models/modelo_rmse_N.pkl` | modelo aprovado N (`dill`) |
+| `fig/modelo_rmse_N.png` | Free-Run nas 5 pistas: v_x, v_y, β (saída 3 e `atan2(v̂_y, v̂_x)` sobrepostos) |
+| `relatorio_validacao_rmse.csv` | RMSE por modelo × pista: `Vx`, `Vy`, `beta_out_deg`, `beta_atan2_deg` |
+| `summary_agg.csv` | média ± desvio entre modelos, por pista |
+| `checklist.csv`, `attempts.csv` | checkpoints (aprovados / todas as tentativas com seed e tempo) |
+| `params.json`, `parametros_utilizados.csv` | configuração exata da rodada |
+
+Para trazer os resultados de volta: copie a pasta `results/e2/…` inteira (pendrive/drive) — os `.pkl`
+e `.png` não vão pelo git.
+
+### GOALS 1 — análise do dataset (já feita; reproduzível)
+
+```bash
+uv run scripts/inspect_columns.py      # -> docs/column_inventory.md
+uv run scripts/check_slip_angle.py     # -> docs/slip_angle_provenance.md + docs/fig/
+```
+
+## 4. Estrutura
+
+```
+src/          lib mggp vendorizada da IC (@7514bfb) — ver src/VENDORED.md; não editar sem registrar lá
+scripts/      análises e o loop de treinamento
+docs/         relatórios gerados pelos scripts
+Database/     dados (git-ignored)
+results/      saídas de treinamento (git-ignored)
+```
+
+## 5. Testes e lint (ambiente do projeto)
+
+```bash
+uv sync
+uv run ruff check .
+uv run pytest            # testes sem dataset; os marcados `dataset` pulam se Database/ não existir
+```

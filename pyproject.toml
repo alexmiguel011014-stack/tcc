@@ -1,0 +1,36 @@
+[project]
+name = "tcc"
+version = "0.1.0"
+description = "TCC — slip-angle estimation as a third MIMO output of the IC's MGGP virtual sensor (UFLA)"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+# Runtime pins mirror the IC's requirements.txt (TreinamentoMGGP_2_0 @7514bfb) for numeric parity.
+dependencies = [
+    "deap==1.4.3",
+    "numpy==2.2.6",
+    "pandas==2.3.3",
+    "scipy==1.15.3",
+    "scikit-learn==1.7.2",
+    "matplotlib==3.10.8",
+    "numba==0.64.0",
+    "tqdm==4.67.3",
+    "joblib==1.5.3",
+    "ipython==8.38.0",
+    "openpyxl>=3.1",
+    "dill>=0.3.8",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.ruff]
+line-length = 120
+exclude = ["src"]          # vendored mggp lib — never reformatted
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+ignore = ["E501"]          # report scripts carry long prose strings
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["dataset: needs Database/ (auto-skipped when absent)"]

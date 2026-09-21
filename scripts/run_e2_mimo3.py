@@ -42,6 +42,7 @@ import pandas as pd
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
+sys.stdout.reconfigure(encoding="utf-8")  # Windows consoles default to cp1252 (β, →, ±)
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))  # the vendored lib uses absolute `from src.… import …`
 from src.mggp import MGGP  # noqa: E402
@@ -179,7 +180,6 @@ def main() -> None:
     ap.add_argument("--population", type=int, default=None, help="override (smoke tests)")
     ap.add_argument("--max-samples", type=int, default=None, help="truncate every track (smoke tests only)")
     a = ap.parse_args()
-    sys.stdout.reconfigure(encoding="utf-8")
 
     params = {**FIXED, **CONFIGS[a.config]}
     if a.generations:
