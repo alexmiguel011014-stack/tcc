@@ -4,7 +4,7 @@
 # ///
 """GOALS 1 — column inventory of the five Wang tracks.
 
-Prints, per track, every column's index, min/max/mean/std and first 3 rows,
+Prints, per track, every column's index and aggregated stats (min/p05/median/p95/max/mean/std — no raw rows),
 flags the 7 columns the IC used, detects duplicate columns, and writes
 docs/column_inventory.md.  Run from the repo root: `uv run scripts/inspect_columns.py`.
 """
@@ -105,14 +105,14 @@ def main() -> None:
             f"dt median {np.median(dt) * 1e3:.3f} ms (min {dt.min() * 1e3:.3f}, max {dt.max() * 1e3:.3f}) · "
             f"NaN cells: {int(df.isna().sum().sum())}",
             "",
-            "| col | name | IC role | min | max | mean | std | row0 | row1 | row2 |",
+            "| col | name | IC role | min | p05 | median | p95 | max | mean | std |",
             "|---:|---|---|---:|---:|---:|---:|---:|---:|---:|",
         ]
         for c in df.columns:
             s = df[c]
             row = (
-                f"| {c} | {NAMES.get(c, '?')} | {KNOWN.get(c, '')} | {s.min():.5g} | {s.max():.5g} | {s.mean():.5g} | {s.std():.5g} "
-                f"| {s.iloc[0]:.5g} | {s.iloc[1]:.5g} | {s.iloc[2]:.5g} |"
+                f"| {c} | {NAMES.get(c, '?')} | {KNOWN.get(c, '')} | {s.min():.5g} | {s.quantile(0.05):.5g} "
+                f"| {s.median():.5g} | {s.quantile(0.95):.5g} | {s.max():.5g} | {s.mean():.5g} | {s.std():.5g} |"
             )
             lines.append(row)
             print(row)
