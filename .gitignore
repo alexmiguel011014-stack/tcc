@@ -1,0 +1,19 @@
+# Jilin/Wang dataset — partnership data, never commit
+Database/
+data/
+results/
+*.pkl
+*.xlsx
+!controle_*.xlsx
+
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# tooling
+graphify-out/
+repomix-output.xml
+.env
