@@ -6,29 +6,44 @@
 #   "openpyxl", "dill",
 # ]
 # ///
-"""GOALS 3 — E2: train the IC champion configuration (T48) as a 5×3 MIMO (vx, vy, β) N times.
+"""GOALS 3 — E2 campaign: N independent MGGP trainings per arm (5x2 baseline and 5x3), in parallel.
 
-Port of `TrainingMGGP_LOOP.ipynb` (IC repo) to a resumable CLI:
-  * one fixed configuration (--config t48 | t19) instead of the control spreadsheet;
-  * third output β = atan2(vy_smooth, vx_smooth) (cols 17, 18) — GOALS 1 verdict; NOT col 19;
-  * --arm 5x2 keeps the IC's two outputs (arm A) so the same script produces the baseline;
-  * every model is validated Free-Run on the 5 tracks (Wang 3.2 included) with RMSE per output,
-    plus β̂ = atan2(v̂y, v̂x) computed from the predicted velocities (so a 5×3 model reports both
-    its evolved β output and the post-hoc β);
-  * checkpoint files let the loop resume after a power failure exactly like the notebook did.
+Port of the IC's `TrainingMGGP_LOOP.ipynb` to a resumable, parallel CLI.
 
-Run from the repo root:
-  uv run scripts/run_e2_mimo3.py --config t48 --arm 5x3 --runs 30
-  uv run scripts/run_e2_mimo3.py --config t48 --arm 5x2 --runs 30          # arm A baseline
-  uv run scripts/run_e2_mimo3.py --runs 1 --generations 3 --population 20 --max-samples 1500 --out results/smoke
+    driver (default)  builds one job queue for every arm in --arms and keeps --workers training
+                      subprocesses busy (default: every logical CPU). Each job = one independent
+                      evolution with its own seed; the vendored lib is single-threaded, so this is
+                      where the CPU goes to 100 %.
+    worker            one attempt: train on Wang 2.1, gate on Wang 2.2 Free-Run
+                      (0 < RMSE < --gate-max, the IC rule), and — if approved — validate Free-Run on
+                      the 5 tracks, save the model (dill), the predictions (.npz) and a figure.
+
+Rules per arm (campaign):
+  * goal: --runs approved models;
+  * an attempt "fails" when its Wang 2.2 Free-Run explodes (inf/NaN/≥ gate) or crashes;
+  * --max-consecutive-fail (5) consecutive failures ⇒ the campaign is FRACASSO: nothing else is
+    launched for it and its in-flight jobs are terminated (no compute spent on a config that keeps
+    blowing up). A success resets the counter (not cumulative). "Consecutive" is in order of
+    completion, which is the only well-defined order when jobs run in parallel;
+  * never over-launch: in-flight ≤ runs − approved, so no approved-beyond-target compute is wasted;
+  * Ctrl+C terminates the workers; re-running the same command resumes from attempts.csv.
+
+Outputs: results/e2/<config>/<arm>/{models,fig,predictions}/modelo_rmse_N.*, attempts.csv,
+relatorio_validacao_rmse.csv, summary_agg.csv, STATUS.txt, attempts/attempt_XXX/log.txt.
+
+    uv run scripts/run_e2_mimo3.py --config t48 --arms 5x2,5x3 --runs 30            # the real thing
+    uv run scripts/run_e2_mimo3.py --arms 5x3 --runs 2 --workers 4 --generations 2 \\
+        --population 10 --max-samples 800 --out results/smoke                       # smoke test
 """
 
 from __future__ import annotations
 
 import argparse
-import gc
 import json
+import os
 import random
+import shutil
+import subprocess
 import sys
 import time
 from datetime import datetime
@@ -55,6 +70,7 @@ TRACKS = {  # name -> (file, role)
     "Wang 8.1 (Teste B)": ("wang81dv_bic_MGGP.xlsx", "testB"),
     "Wang 3.2 (Teste C)": ("wang32dv_bic_MGGP.xlsx", "testC"),
 }
+GATE_TRACK = "Wang 2.2 (Validação)"
 INPUT_COLS = [14, 2, 22, 23, 11]  # ax_nobias, acc_y, wheel front, wheel rear, YawRate — as the IC
 VX_COL, VY_COL = 18, 17
 
@@ -69,10 +85,24 @@ FIXED = {
     "mutationRate": 0.3, "crossoverRate": 0.8, "elitePercentage": 10,
     "mode": "MIMO", "froe_mode": False, "operators": ["add", "subtraction", "mul"],
 }
-APPROVAL_RMSE_MAX = 100.0  # notebook rule: 0 < RMSE(wang22, FreeRun) < 100
+ATTEMPT_COLS = ["attempt", "seed", "status", "rmse_val", "seconds", "model", "started", "finished", "error"]
+FINAL = {"approved", "rejected", "crashed", "cancelled"}
+WORKER_ENV = {  # one single-threaded process per attempt; no BLAS/numba oversubscription
+    "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1", "MKL_NUM_THREADS": "1", "NUMBA_NUM_THREADS": "1",
+    "TQDM_DISABLE": "1", "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1", "MPLBACKEND": "Agg",
+}
 
 
-# ----------------------------------------------------------------------------- data
+# ----------------------------------------------------------------------------- data / metrics
+def build_params(config: str, generations: int | None, population: int | None) -> dict:
+    p = {**FIXED, **CONFIGS[config]}
+    if generations:
+        p["generations"] = generations
+    if population:
+        p["populationSize"] = population
+    return p
+
+
 def load_track(file: str, arm: str, beta_unit: str, max_samples: int | None):
     """Same loader as the IC notebook (`carregar_dados_bicicleta`) + optional β third output."""
     df = pd.read_excel(DATA_DIR / file, header=None)
@@ -95,11 +125,6 @@ def to_rad(x: np.ndarray, beta_unit: str) -> np.ndarray:
     return np.radians(x) if beta_unit == "deg" else x
 
 
-# ----------------------------------------------------------------------------- checkpoints
-def read_csv(path: Path, columns: list[str]) -> pd.DataFrame:
-    return pd.read_csv(path) if path.exists() else pd.DataFrame(columns=columns)
-
-
 def free_run(model, y: np.ndarray, u: np.ndarray, params: dict):
     args = (y, u) if params["evaluationTypeTest"] != "MShooting" else (params["k"], y, u)
     yp, yd = model.predict(params["evaluationTypeTest"], *args)
@@ -107,27 +132,33 @@ def free_run(model, y: np.ndarray, u: np.ndarray, params: dict):
     return yp[:n], yd[:n]
 
 
-# ----------------------------------------------------------------------------- validation
-def validate_model(model, model_name: str, arm: str, beta_unit: str, params: dict, out: Path,
+def now() -> str:
+    return datetime.now().isoformat(timespec="seconds")
+
+
+# ----------------------------------------------------------------------------- worker
+def validate_model(model, label: str, arm: str, beta_unit: str, params: dict, out: Path,
                    max_samples: int | None) -> list[dict]:
-    rows = []
+    """Free-Run on the 5 tracks → rows (RMSE per output, evolved β and post-hoc atan2 β), fig.png, predictions.npz."""
+    rows, preds = [], {}
     n_out = 3 if arm == "5x3" else 2
     fig, axes = plt.subplots(len(TRACKS), 3, figsize=(20, 4 * len(TRACKS)))
-    fig.suptitle(f"Free-Run validation — {model_name} ({arm}, β in {beta_unit})", fontsize=15, y=1.0)
+    fig.suptitle(f"Free-Run validation — {label} ({arm}, β in {beta_unit})", fontsize=15, y=1.0)
 
     for i, (track, (file, role)) in enumerate(TRACKS.items()):
         u, y = load_track(file, arm, beta_unit, max_samples)
         try:
             yp, yd = free_run(model, y, u, params)
-            ok = np.all(np.isfinite(yp)) and np.abs(yp).max() < 1e4
+            ok = bool(np.all(np.isfinite(yp)) and np.abs(yp).max() < 1e4)
         except Exception as e:  # divergence / LinAlg — record and move on, like the notebook
             print(f"    ! {track}: {type(e).__name__}: {e}")
             yp, yd, ok = np.zeros_like(y), y, False
+        preds[f"{role}_yd"], preds[f"{role}_yp"] = yd, yp
 
         beta_true = to_rad(yd[:, 2], beta_unit) if n_out == 3 else np.arctan2(yd[:, 1], yd[:, 0])
         beta_post = np.arctan2(yp[:, 1], yp[:, 0])  # β from the predicted velocities (arm A logic)
         row = {
-            "Modelo": model_name, "Pista": track, "Papel": role, "ok": bool(ok),
+            "Modelo": label, "Pista": track, "Papel": role, "ok": ok,
             "RMSE_Vx": rmse(yd[:, 0], yp[:, 0]) if ok else np.nan,
             "RMSE_Vy": rmse(yd[:, 1], yp[:, 1]) if ok else np.nan,
             "RMSE_beta_atan2_deg": np.degrees(rmse(beta_true, beta_post)) if ok else np.nan,
@@ -138,13 +169,11 @@ def validate_model(model, model_name: str, arm: str, beta_unit: str, params: dic
         row["RMSE_Medio_VxVy"] = (row["RMSE_Vx"] + row["RMSE_Vy"]) / 2
         rows.append(row)
 
-        # --- plots: vx | vy | β (evolved output if 5x3, post-hoc atan2 always)
         for j, (lbl, col) in enumerate([("Vx [m/s]", 0), ("Vy [m/s]", 1)]):
             ax = axes[i, j]
             ax.plot(yd[:, col], color="black", lw=0.8, label="Real")
             ax.plot(yp[:, col], color="tab:blue" if j == 0 else "tab:red", lw=0.8, ls="--", label="Previsto")
-            key = "RMSE_Vx" if j == 0 else "RMSE_Vy"
-            ax.set_title(f"{track} — {lbl} | RMSE {row[key]:.4f}")
+            ax.set_title(f"{track} — {lbl} | RMSE {row['RMSE_Vx' if j == 0 else 'RMSE_Vy']:.4f}")
             ax.grid(True, ls=":", alpha=0.6)
         ax = axes[i, 2]
         ax.plot(np.degrees(beta_true), color="black", lw=0.8, label="β real")
@@ -158,129 +187,279 @@ def validate_model(model, model_name: str, arm: str, beta_unit: str, params: dic
         ax.grid(True, ls=":", alpha=0.6)
     axes[0, 0].legend(fontsize=8)
     fig.tight_layout()
-    (out / "fig").mkdir(exist_ok=True)
-    fig.savefig(out / "fig" / f"{model_name}.png", dpi=90, bbox_inches="tight")
+    fig.savefig(out / "fig.png", dpi=90, bbox_inches="tight")
     plt.close(fig)
+    np.savez_compressed(out / "predictions.npz", **preds)
     return rows
 
 
-# ----------------------------------------------------------------------------- main
-def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--config", choices=CONFIGS, default="t48")
-    ap.add_argument("--arm", choices=["5x3", "5x2"], default="5x3")
-    ap.add_argument("--beta-unit", choices=["deg", "rad"], default="deg",
-                    help="unit of the β output during training; fitness is the plain mean of per-output RMSE, "
-                         "so rad (std≈0.04) would make β invisible next to vx (std≈3.6 m/s)")
-    ap.add_argument("--runs", type=int, default=30, help="approved models to reach")
-    ap.add_argument("--max-attempts", type=int, default=None, help="default: 3 × runs")
-    ap.add_argument("--seed", type=int, default=2026, help="base seed; attempt i uses seed+i")
-    ap.add_argument("--out", type=Path, default=None, help="default: results/e2/<config>_<arm>_<unit>")
-    ap.add_argument("--generations", type=int, default=None, help="override (smoke tests)")
-    ap.add_argument("--population", type=int, default=None, help="override (smoke tests)")
-    ap.add_argument("--max-samples", type=int, default=None, help="truncate every track (smoke tests only)")
-    a = ap.parse_args()
-
-    params = {**FIXED, **CONFIGS[a.config]}
-    if a.generations:
-        params["generations"] = a.generations
-    if a.population:
-        params["populationSize"] = a.population
-    out = a.out or ROOT / "results" / "e2" / f"{a.config}_{a.arm}_{a.beta_unit}"
-    (out / "models").mkdir(parents=True, exist_ok=True)
-    max_attempts = a.max_attempts or 3 * a.runs
-
-    meta = {"config": a.config, "arm": a.arm, "beta_unit": a.beta_unit, "beta_def": "atan2(col17, col18)",
-            "input_cols": INPUT_COLS, "vx_col": VX_COL, "vy_col": VY_COL, "runs": a.runs, "base_seed": a.seed,
-            "max_samples": a.max_samples, "params": params, "lib": "src/ vendored @7514bfb"}
-    (out / "params.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
-    # same file the IC produced, for side-by-side reading
-    pd.DataFrame(list(params.items()), columns=["Parametro", "Valor"]).to_csv(out / "parametros_utilizados.csv", index=False)
-
-    ck_path, log_path, rep_path = out / "checklist.csv", out / "attempts.csv", out / "relatorio_validacao_rmse.csv"
-    ck = read_csv(ck_path, ["modelo", "seed", "attempt", "rmse_val", "treino", "validacao", "started", "finished"])
-    attempts_df = read_csv(log_path, ["attempt", "seed", "rmse_val", "approved", "seconds", "when"])
-    approved = int((ck["treino"] == "Concluído").sum()) if len(ck) else 0
-    attempt = int(attempts_df["attempt"].max()) if len(attempts_df) else 0
-    print(f"[E2] {a.config} {a.arm} β={a.beta_unit} → {out}\n[E2] resuming: {approved}/{a.runs} approved, "
-          f"{attempt} attempts done\n")
-
-    u_train, y_train = load_track(TRACKS["Wang 2.1 (Treino)"][0], a.arm, a.beta_unit, a.max_samples)
-    u_val, y_val = load_track(TRACKS["Wang 2.2 (Validação)"][0], a.arm, a.beta_unit, a.max_samples)
-    print(f"[E2] train {u_train.shape} → {y_train.shape} | val {u_val.shape} → {y_val.shape}")
-
-    # --- 1. factory: keep training until `runs` models pass the wang22 Free-Run gate
-    while approved < a.runs and attempt < max_attempts:
-        attempt += 1
-        seed = a.seed + attempt
-        random.seed(seed)
-        np.random.seed(seed)
-        t0 = time.time()
-        print(f"\n{'=' * 80}\n[E2] attempt {attempt}/{max_attempts} · seed {seed} · approved {approved}/{a.runs}\n{'=' * 80}")
-
-        tmp = out / "temp_mggp.pkl"
-        mggp = MGGP(inputs=u_train, outputs=y_train, validation=(u_val, y_val), filename=str(tmp), **params)
+def worker(a: argparse.Namespace) -> None:
+    out = Path(a.out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    params = build_params(a.config, a.generations, a.population)
+    random.seed(a.seed)
+    np.random.seed(a.seed)
+    res = {"attempt": a.attempt, "seed": a.seed, "arm": a.arm, "approved": False, "rmse_val": None, "error": None}
+    t0 = time.time()
+    print(f"[worker] {a.arm} attempt {a.attempt} seed {a.seed} started {now()}")
+    try:
+        u_train, y_train = load_track(TRACKS["Wang 2.1 (Treino)"][0], a.arm, a.beta_unit, a.max_samples)
+        u_val, y_val = load_track(TRACKS[GATE_TRACK][0], a.arm, a.beta_unit, a.max_samples)
+        mggp = MGGP(inputs=u_train, outputs=y_train, validation=(u_val, y_val),
+                    filename=str(out / "temp_mggp.pkl"), **params)
         mggp.run()
         best = mggp._hof[0]
-
-        err_val = 999.0
         try:
             yp, yd = free_run(best, y_val, u_val, params)
-            err_val = float(best.score(yd, yp, params["evaluationMode"]))
-        except Exception as e:
-            print(f"    ! validation failed: {type(e).__name__}: {e}")
-        ok = 0.0 < err_val < APPROVAL_RMSE_MAX and np.isfinite(err_val)
-        secs = round(time.time() - t0)
-
-        if ok:
-            approved += 1
-            name = f"modelo_rmse_{approved}"
-            with open(out / "models" / f"{name}.pkl", "wb") as f:
+            err = float(best.score(yd, yp, params["evaluationMode"]))
+        except Exception as e:  # explosion inside the predictor counts as a failed attempt
+            err, res["error"] = float("inf"), f"gate: {type(e).__name__}: {e}"
+        res["rmse_val"] = err if np.isfinite(err) else None
+        res["approved"] = bool(np.isfinite(err) and 0.0 < err < a.gate_max)
+        print(f"[worker] gate {GATE_TRACK}: RMSE {err:.4f} → {'APROVADO' if res['approved'] else 'REPROVADO'}")
+        if res["approved"]:
+            with open(out / "model.pkl", "wb") as f:
                 dill.dump(best, f)
-            ck.loc[len(ck)] = [name, seed, attempt, err_val, "Concluído", "Pendente",
-                               datetime.fromtimestamp(t0).isoformat(timespec="seconds"), datetime.now().isoformat(timespec="seconds")]
-            ck.to_csv(ck_path, index=False)
-            print(f" -> modelo {approved} APROVADO | RMSE val {err_val:.4f} | {secs} s")
+            (out / "equation.txt").write_text(f"{best}\ntheta:\n{best._theta}\n", encoding="utf-8")
+            rows = validate_model(best, f"attempt_{a.attempt:03d}", a.arm, a.beta_unit, params, out, a.max_samples)
+            pd.DataFrame(rows).to_csv(out / "validation.csv", index=False)
+    except Exception as e:
+        res["error"] = f"{type(e).__name__}: {e}"
+        print(f"[worker] CRASH {res['error']}")
+    res["seconds"] = round(time.time() - t0)
+    (out / "temp_mggp.pkl").unlink(missing_ok=True)
+    (out / "result.json").write_text(json.dumps(res), encoding="utf-8")
+    print(f"[worker] finished in {res['seconds']} s")
+
+
+# ----------------------------------------------------------------------------- driver
+class Campaign:
+    """One arm: its attempt ledger, its approved-model counter and its consecutive-failure counter."""
+
+    def __init__(self, arm: str, root: Path, a: argparse.Namespace):
+        self.arm, self.a = arm, a
+        self.dir = root / arm
+        for sub in ("attempts", "models", "fig", "predictions"):
+            (self.dir / sub).mkdir(parents=True, exist_ok=True)
+        self.csv = self.dir / "attempts.csv"
+        self.df = pd.read_csv(self.csv) if self.csv.exists() else pd.DataFrame(columns=ATTEMPT_COLS)
+        stale = ~self.df["status"].isin(FINAL)  # launched by a previous driver that died → relaunch
+        for k in self.df.loc[stale, "attempt"]:
+            shutil.rmtree(self.dir / "attempts" / f"attempt_{int(k):03d}", ignore_errors=True)
+        self.df = self.df[~stale].reset_index(drop=True)
+        self.next_attempt = int(self.df["attempt"].max()) + 1 if len(self.df) else 1
+        self.approved = int((self.df["status"] == "approved").sum())
+        self.consec_fail = self._trailing_failures()
+        self.inflight: dict[int, tuple[subprocess.Popen, object]] = {}
+        self.state = "FRACASSO" if self.consec_fail >= a.max_consecutive_fail else (
+            "DONE" if self.approved >= a.runs else "RUNNING")
+        self._write_status()
+
+    def _trailing_failures(self) -> int:
+        n = 0
+        for st in self.df.sort_values("finished")["status"][::-1]:
+            if st in ("rejected", "crashed"):
+                n += 1
+            elif st == "approved":
+                break
+        return n
+
+    def need(self) -> int:
+        return max(0, self.a.runs - self.approved - len(self.inflight)) if self.state == "RUNNING" else 0
+
+    def launch(self) -> None:
+        k = self.next_attempt
+        self.next_attempt += 1
+        seed = self.a.seed + k  # same seed for the same attempt index in every arm (paired design)
+        adir = self.dir / "attempts" / f"attempt_{k:03d}"
+        adir.mkdir(parents=True, exist_ok=True)
+        cmd = [sys.executable, str(Path(__file__).resolve()), "worker", "--arm", self.arm, "--config", self.a.config,
+               "--attempt", str(k), "--seed", str(seed), "--out-dir", str(adir), "--beta-unit", self.a.beta_unit,
+               "--gate-max", str(self.a.gate_max)]
+        for flag in ("generations", "population", "max_samples"):
+            if getattr(self.a, flag):
+                cmd += [f"--{flag.replace('_', '-')}", str(getattr(self.a, flag))]
+        log = open(adir / "log.txt", "w", encoding="utf-8")
+        proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, cwd=ROOT, env={**os.environ, **WORKER_ENV})
+        self.inflight[k] = (proc, log)
+        self.df.loc[len(self.df)] = [k, seed, "running", np.nan, np.nan, "", now(), "", ""]
+        self._save()
+        print(f"[{self.arm}] ▶ attempt {k:03d} (seed {seed}) launched · {len(self.inflight)} in flight")
+
+    def poll(self) -> bool:
+        """Collect finished workers. Returns True if anything changed."""
+        changed = False
+        for k, (proc, log) in list(self.inflight.items()):
+            if proc.poll() is None:
+                continue
+            log.close()
+            del self.inflight[k]
+            self._finish(k, proc.returncode)
+            changed = True
+        if self.state == "RUNNING" and self.approved >= self.a.runs and not self.inflight:
+            self.state = "DONE"
+            self._write_status()
+        return changed
+
+    def _finish(self, k: int, rc: int) -> None:
+        adir = self.dir / "attempts" / f"attempt_{k:03d}"
+        rj = adir / "result.json"
+        res = json.loads(rj.read_text(encoding="utf-8")) if rj.exists() else {}
+        row = self.df.index[self.df["attempt"] == k][0]
+        self.df.loc[row, ["finished", "seconds", "rmse_val"]] = [now(), res.get("seconds", np.nan), res.get("rmse_val", np.nan)]
+        if not res:
+            status, self.df.loc[row, "error"] = "crashed", f"worker exit code {rc} (no result.json)"
+        elif res.get("approved"):
+            status = "approved"
+        elif res.get("error") and res.get("rmse_val") is None and "gate" not in str(res.get("error")):
+            status, self.df.loc[row, "error"] = "crashed", res["error"]
         else:
-            print(f" -> REPROVADO | RMSE val {err_val:.4f} | {secs} s")
-        attempts_df.loc[len(attempts_df)] = [attempt, seed, err_val, ok, secs, datetime.now().isoformat(timespec="seconds")]
-        attempts_df.to_csv(log_path, index=False)
+            status, self.df.loc[row, "error"] = "rejected", res.get("error") or ""
 
-        tmp.unlink(missing_ok=True)
-        del mggp, best
-        gc.collect()
+        if status == "approved":
+            self.approved += 1
+            self.consec_fail = 0
+            name = f"modelo_rmse_{self.approved}"
+            self.df.loc[row, "model"] = name
+            shutil.move(adir / "model.pkl", self.dir / "models" / f"{name}.pkl")
+            shutil.move(adir / "fig.png", self.dir / "fig" / f"{name}.png")
+            shutil.move(adir / "predictions.npz", self.dir / "predictions" / f"{name}.npz")
+            val = pd.read_csv(adir / "validation.csv")
+            val["Modelo"] = name
+            rep_path = self.dir / "relatorio_validacao_rmse.csv"
+            rep = pd.concat([pd.read_csv(rep_path), val], ignore_index=True) if rep_path.exists() else val
+            rep.to_csv(rep_path, index=False)
+            self._summary(rep)
+            print(f"[{self.arm}] ✔ attempt {k:03d} APROVADO → {name} · RMSE val {res['rmse_val']:.4f} · "
+                  f"{res['seconds']} s · {self.approved}/{self.a.runs}")
+        else:
+            self.consec_fail += 1
+            print(f"[{self.arm}] ✘ attempt {k:03d} {status.upper()} · RMSE val {res.get('rmse_val')} · "
+                  f"consecutive failures {self.consec_fail}/{self.a.max_consecutive_fail}")
+            if self.consec_fail >= self.a.max_consecutive_fail and self.state == "RUNNING":
+                self.state = "FRACASSO"
+                print(f"[{self.arm}] ■ FRACASSO: {self.consec_fail} consecutive failures — stopping this arm, "
+                      f"terminating {len(self.inflight)} in-flight job(s)")
+                self.terminate("cancelled")
+        self.df.loc[row, "status"] = status
+        self._save()
+        self._write_status()
 
-    if approved < a.runs:
-        print(f"\n[E2] stopped at {approved}/{a.runs} approved after {attempt} attempts (max {max_attempts}).")
+    def terminate(self, status: str) -> None:
+        for k, (proc, log) in list(self.inflight.items()):
+            if proc.poll() is None:
+                proc.terminate()
+            log.close()
+            row = self.df.index[self.df["attempt"] == k][0]
+            self.df.loc[row, ["status", "finished"]] = [status, now()]
+        self.inflight.clear()
+        self._save()
+        self._write_status()
 
-    # --- 2. Free-Run validation of every approved model on the 5 tracks (resumable per model)
-    print(f"\n[E2] validating {int((ck['validacao'] != 'Concluído').sum())} pending model(s) on {len(TRACKS)} tracks…")
-    for idx in ck.index[ck["validacao"] != "Concluído"]:
-        name = ck.at[idx, "modelo"]
-        path = out / "models" / f"{name}.pkl"
-        if not path.exists():
-            print(f"    ! {name}: file missing, skipped")
-            continue
-        with open(path, "rb") as f:
-            model = dill.load(f)
-        t0 = time.time()
-        rows = validate_model(model, name, a.arm, a.beta_unit, params, out, a.max_samples)
-        rep = read_csv(rep_path, list(rows[0].keys()))
-        rep = pd.concat([rep[rep["Modelo"] != name], pd.DataFrame(rows)], ignore_index=True)
-        rep.to_csv(rep_path, index=False)
-        ck.at[idx, "validacao"] = "Concluído"
-        ck.to_csv(ck_path, index=False)
-        print(f" -> {name} validado ({round(time.time() - t0)} s)")
-
-    # --- 3. aggregate: mean ± std over models, per track
-    if rep_path.exists():
-        rep = pd.read_csv(rep_path)
+    def _summary(self, rep: pd.DataFrame) -> None:
         metrics = [c for c in rep.columns if c.startswith("RMSE_")]
-        agg = rep[rep["ok"]].groupby("Pista")[metrics].agg(["mean", "std", "count"]).round(4)
-        agg.to_csv(out / "summary_agg.csv")
-        print("\n[E2] summary (approved & finite models):\n")
-        print(agg.xs("mean", axis=1, level=1).to_string())
-    print(f"\n[E2] done → {out}")
+        ok = rep[rep["ok"].astype(bool)]
+        if len(ok):
+            ok.groupby("Pista")[metrics].agg(["mean", "std", "count"]).round(4).to_csv(self.dir / "summary_agg.csv")
+
+    def _save(self) -> None:
+        self.df.to_csv(self.csv, index=False)
+
+    def _write_status(self) -> None:
+        counts = self.df["status"].value_counts().to_dict()
+        (self.dir / "STATUS.txt").write_text(
+            f"{self.state}\narm={self.arm} approved={self.approved}/{self.a.runs} consecutive_failures={self.consec_fail} "
+            f"in_flight={len(self.inflight)} attempts={counts}\nupdated={now()}\n", encoding="utf-8")
+
+    def line(self) -> str:
+        c = self.df["status"].value_counts().to_dict()
+        return (f"{self.arm}: {self.state} · {self.approved}/{self.a.runs} approved · {len(self.inflight)} running · "
+                f"{c.get('rejected', 0)} rejected · {c.get('crashed', 0)} crashed · consec-fail {self.consec_fail}")
+
+
+def driver(a: argparse.Namespace) -> None:
+    arms = [x.strip() for x in a.arms.split(",") if x.strip()]
+    for arm in arms:
+        if arm not in ("5x2", "5x3"):
+            sys.exit(f"unknown arm {arm!r} (use 5x2, 5x3)")
+    workers = a.workers or os.cpu_count() or 1
+    root = a.out or ROOT / "results" / "e2" / a.config
+    root.mkdir(parents=True, exist_ok=True)
+    params = build_params(a.config, a.generations, a.population)
+    meta = {"config": a.config, "arms": arms, "runs": a.runs, "max_consecutive_fail": a.max_consecutive_fail,
+            "workers": workers, "beta_unit": a.beta_unit, "beta_def": "atan2(col17, col18)", "gate": GATE_TRACK,
+            "gate_max": a.gate_max, "input_cols": INPUT_COLS, "vx_col": VX_COL, "vy_col": VY_COL, "base_seed": a.seed,
+            "max_samples": a.max_samples, "params": params, "lib": "src/ vendored @7514bfb", "started": now()}
+    (root / "params.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
+    pd.DataFrame(list(params.items()), columns=["Parametro", "Valor"]).to_csv(root / "parametros_utilizados.csv", index=False)
+
+    camps = [Campaign(arm, root, a) for arm in arms]
+    print(f"[E2] {a.config} · arms {arms} · {a.runs} runs each · {workers} workers · β in {a.beta_unit} → {root}")
+    for c in camps:
+        print("[E2] resume:", c.line())
+
+    last_heartbeat = 0.0
+    try:
+        while any(c.state == "RUNNING" for c in camps):
+            running = sum(len(c.inflight) for c in camps)
+            for c in camps:  # fill free workers, first arm first
+                while running < workers and c.need() > 0:
+                    c.launch()
+                    running += 1
+            changed = any(c.poll() for c in camps)
+            if changed or time.time() - last_heartbeat > 600:
+                print(f"[E2 {datetime.now():%H:%M}] " + " | ".join(c.line() for c in camps))
+                last_heartbeat = time.time()
+            time.sleep(a.poll)
+    except KeyboardInterrupt:
+        print("\n[E2] Ctrl+C — terminating workers; re-run the same command to resume")
+        for c in camps:
+            c.terminate("running")  # left non-final on purpose → relaunched on resume
+        sys.exit(130)
+
+    print("\n[E2] finished:")
+    for c in camps:
+        print("   ", c.line())
+        sp = c.dir / "summary_agg.csv"
+        if sp.exists():
+            agg = pd.read_csv(sp, header=[0, 1], index_col=0)
+            print(agg.xs("mean", axis=1, level=1).to_string(), "\n")
+
+
+# ----------------------------------------------------------------------------- CLI
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd")
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--config", choices=CONFIGS, default="t48")
+    common.add_argument("--beta-unit", choices=["deg", "rad"], default="deg",
+                        help="β unit for the 5x3 target; the lib's fitness is the plain mean of per-output RMSE, "
+                             "so rad (std≈0.04) would make β invisible next to vx (std≈3.6 m/s)")
+    common.add_argument("--gate-max", type=float, default=100.0, help="approve if 0 < RMSE(Wang 2.2 Free-Run) < this")
+    common.add_argument("--generations", type=int, default=None, help="override (smoke tests)")
+    common.add_argument("--population", type=int, default=None, help="override (smoke tests)")
+    common.add_argument("--max-samples", type=int, default=None, help="truncate every track (smoke tests only)")
+
+    d = sub.add_parser("driver", parents=[common], help="run the campaign(s) (default)")
+    d.add_argument("--arms", default="5x2,5x3", help="comma-separated: 5x2, 5x3")
+    d.add_argument("--runs", type=int, default=30, help="approved models to reach, per arm")
+    d.add_argument("--max-consecutive-fail", type=int, default=5)
+    d.add_argument("--workers", type=int, default=None, help="parallel trainings (default: all logical CPUs)")
+    d.add_argument("--seed", type=int, default=2026, help="attempt k uses seed+k in every arm")
+    d.add_argument("--out", type=Path, default=None, help="default: results/e2/<config>")
+    d.add_argument("--poll", type=float, default=10.0, help="seconds between checks on the workers")
+
+    w = sub.add_parser("worker", parents=[common], help="one attempt (launched by the driver)")
+    w.add_argument("--arm", choices=["5x2", "5x3"], required=True)
+    w.add_argument("--attempt", type=int, required=True)
+    w.add_argument("--seed", type=int, required=True)
+    w.add_argument("--out-dir", required=True)
+
+    argv = sys.argv[1:]
+    if not argv or argv[0].startswith("-"):
+        argv = ["driver", *argv]
+    a = ap.parse_args(argv)
+    worker(a) if a.cmd == "worker" else driver(a)
 
 
 if __name__ == "__main__":

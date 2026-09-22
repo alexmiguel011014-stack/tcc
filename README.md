@@ -64,36 +64,46 @@ Nos dois casos rode os scripts **a partir da raiz do repositório** (eles procur
 
 ## 3. Rodar
 
-### Experimento E2 — 30 treinamentos do T48 em 5×3 (vx, vy, β)
+### Experimento E2 — 30 modelos 5×2 + 30 modelos 5×3 do T48, em paralelo
 
 ```bash
-uv run scripts/run_e2_mimo3.py --config t48 --arm 5x3 --runs 30
-# sem uv:  python scripts/run_e2_mimo3.py --config t48 --arm 5x3 --runs 30
+uv run scripts/run_e2_mimo3.py --config t48 --arms 5x2,5x3 --runs 30
+# sem uv:  python scripts/run_e2_mimo3.py --config t48 --arms 5x2,5x3 --runs 30
 ```
 
-- Porta do `TrainingMGGP_LOOP.ipynb` da IC: mesma lib, mesmos parâmetros do T48
-  (`nDelays [1,2,5,10,25,50]`, 7 termos, `maxHeight 6`, 300 gerações × 300 indivíduos, MShooting → Free-Run),
-  mesma regra de aprovação (`0 < RMSE(Wang 2.2) < 100`).
-- `--arm 5x2` gera o baseline da IC (braço A) com o mesmo script; `--config t19` usa o modelo eleito da IC.
-- `β` treina em **graus** por padrão (`--beta-unit`): a fitness da lib é a média simples das RMSE por saída,
-  e em rad o `β` seria invisível frente a `v_x`.
-- **Retomável**: caiu a luz, rode o mesmo comando — ele continua do último modelo aprovado
-  (`checklist.csv`) e da última validação concluída.
-- Medir o tempo antes de comprometer dias: `--runs 1` e ler `attempts.csv`.
+Porta do `TrainingMGGP_LOOP.ipynb` da IC: mesma lib, mesmos parâmetros do T48 (`nDelays [1,2,5,10,25,50]`,
+7 termos, `maxHeight 6`, 300 gerações × 300 indivíduos, MShooting → Free-Run), mesma regra de aprovação
+(`0 < RMSE(Wang 2.2, Free-Run) < 100`). O que muda:
 
-Saída em `results/e2/t48_5x3_deg/` (ignorado pelo git):
+- **Paralelo de verdade.** A lib é single-thread, então o driver dispara **um processo por tentativa** e mantém
+  `--workers` deles ocupados (padrão: todos os núcleos lógicos → CPU a 100 %). Cada worker roda com BLAS/numba
+  em 1 thread para não haver oversubscription. Com núcleos suficientes, as 60 tentativas iniciais sobem de uma vez.
+- **Dois braços numa campanha só** (`--arms 5x2,5x3`): fila única de jobs, contadores independentes por braço.
+  `5x2` reproduz a IC (β = `atan2(v̂y, v̂x)` pós-hoc); `5x3` treina β como 3ª saída (`atan2(col 17, col 18)`, em
+  graus por padrão — `--beta-unit`).
+- **Regra de fracasso** (`--max-consecutive-fail 5`): tentativa falha = free-run da Wang 2.2 explode (inf/NaN/≥ gate)
+  ou o worker quebra. **5 falhas seguidas ⇒ o braço vira `FRACASSO`**: nada mais é lançado para ele e os jobs em voo
+  são encerrados. Uma aprovação zera o contador (não é acumulativo). "Seguidas" = na ordem em que terminam.
+- **Sem desperdício**: em voo ≤ `runs − aprovados`; nunca treina além da meta.
+- **Retomável**: `Ctrl+C` encerra os workers; o mesmo comando continua do `attempts.csv`. Caiu a luz, idem.
+- Cada modelo aprovado é validado Free-Run nas **5 pistas** dentro do próprio worker, e as predições ficam salvas
+  (`predictions/*.npz`) para a análise posterior sem refazer free-run.
+
+Medir antes de comprometer a máquina: `--runs 1 --workers 1` e ler `seconds` em `attempts.csv`.
+
+Saída em `results/e2/t48/<braço>/` (ignorado pelo git):
 
 | arquivo | conteúdo |
 |---|---|
 | `models/modelo_rmse_N.pkl` | modelo aprovado N (`dill`) |
+| `predictions/modelo_rmse_N.npz` | `{papel}_yd` / `{papel}_yp` por pista — séries reais e preditas de todas as saídas |
 | `fig/modelo_rmse_N.png` | Free-Run nas 5 pistas: v_x, v_y, β (saída 3 e `atan2(v̂_y, v̂_x)` sobrepostos) |
-| `relatorio_validacao_rmse.csv` | RMSE por modelo × pista: `Vx`, `Vy`, `beta_out_deg`, `beta_atan2_deg` |
+| `relatorio_validacao_rmse.csv` | RMSE por modelo × pista: `Vx`, `Vy`, `beta_out_deg` (só 5x3), `beta_atan2_deg` |
 | `summary_agg.csv` | média ± desvio entre modelos, por pista |
-| `checklist.csv`, `attempts.csv` | checkpoints (aprovados / todas as tentativas com seed e tempo) |
-| `params.json`, `parametros_utilizados.csv` | configuração exata da rodada |
+| `attempts.csv`, `STATUS.txt` | ledger de todas as tentativas (seed, status, RMSE, tempo) e estado do braço |
+| `attempts/attempt_XXX/log.txt` | log completo do treinamento daquela tentativa (`tail -f` para acompanhar) |
 
-Para trazer os resultados de volta: copie a pasta `results/e2/…` inteira (pendrive/drive) — os `.pkl`
-e `.png` não vão pelo git.
+Para trazer os resultados de volta: copie `results/e2/t48/` inteira (pendrive/drive) — nada disso vai pelo git.
 
 ### GOALS 1 — análise do dataset (já feita; reproduzível)
 

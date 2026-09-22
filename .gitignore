@@ -17,3 +17,6 @@ __pycache__/
 graphify-out/
 repomix-output.xml
 .env
+
+# personal documents dropped in the repo root (registration forms etc.)
+/*.pdf
