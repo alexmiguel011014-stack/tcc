@@ -89,6 +89,9 @@ Porta do `TrainingMGGP_LOOP.ipynb` da IC: mesma lib, mesmos parâmetros do T48 (
 - Cada modelo aprovado é validado Free-Run nas **5 pistas** dentro do próprio worker, e as predições ficam salvas
   (`predictions/*.npz`) para a análise posterior sem refazer free-run.
 
+Antes de lançar a campanha o driver confere as 5 pistas em `Database/` e **aborta na hora** se faltar alguma
+(sem isso, cada tentativa quebraria e o braço marcaria `FRACASSO` por falta de dados, não por instabilidade).
+
 Medir antes de comprometer a máquina: `--runs 1 --workers 1` e ler `seconds` em `attempts.csv`.
 
 Saída em `results/e2/t48/<braço>/` (ignorado pelo git):

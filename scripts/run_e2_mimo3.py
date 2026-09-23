@@ -57,7 +57,8 @@ import pandas as pd
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
-sys.stdout.reconfigure(encoding="utf-8")  # Windows consoles default to cp1252 (β, →, ±)
+for _stream in (sys.stdout, sys.stderr):  # Windows consoles default to cp1252 (β, →, ±, ç)
+    _stream.reconfigure(encoding="utf-8")
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))  # the vendored lib uses absolute `from src.… import …`
 from src.mggp import MGGP  # noqa: E402
@@ -377,11 +378,27 @@ class Campaign:
                 f"{c.get('rejected', 0)} rejected · {c.get('crashed', 0)} crashed · consec-fail {self.consec_fail}")
 
 
+def preflight() -> None:
+    """Fail fast and loud when the dataset is absent — otherwise every attempt crashes and the
+    consecutive-failure rule reports FRACASSO for what is really a missing-data problem."""
+    missing = [f for f, _ in TRACKS.values() if not (DATA_DIR / f).exists()]
+    if missing:
+        sys.exit(f"[E2] dataset ausente em {DATA_DIR}\n"
+                 f"      faltam {len(missing)}/{len(TRACKS)} arquivo(s): {', '.join(missing)}\n"
+                 f"      copie os 5 .xlsx da base Wang/Jilin para essa pasta (ver README, seção 1) e rode de novo.")
+    try:
+        load_track(TRACKS["Wang 2.1 (Treino)"][0], "5x3", "deg", 50)
+    except Exception as e:  # unreadable/short/wrong file — better here than in 60 subprocesses
+        sys.exit(f"[E2] não consegui ler {DATA_DIR / TRACKS['Wang 2.1 (Treino)'][0]}: {type(e).__name__}: {e}")
+    print(f"[E2] dataset OK: {len(TRACKS)} pistas em {DATA_DIR}")
+
+
 def driver(a: argparse.Namespace) -> None:
     arms = [x.strip() for x in a.arms.split(",") if x.strip()]
     for arm in arms:
         if arm not in ("5x2", "5x3"):
             sys.exit(f"unknown arm {arm!r} (use 5x2, 5x3)")
+    preflight()
     workers = a.workers or os.cpu_count() or 1
     root = a.out or ROOT / "results" / "e2" / a.config
     root.mkdir(parents=True, exist_ok=True)
