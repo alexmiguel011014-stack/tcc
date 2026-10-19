@@ -34,5 +34,9 @@ IC context: `CONTEXTO_IC.md`. Dataset legend: `docs/column_inventory.md`.
 - Python `>=3.12,<3.13` pinned for parity with the IC (`numpy 2.2.6`, `numba 0.64.0`).
 - Scripts carry PEP 723 inline deps: `uv run scripts/<x>.py`. `pyproject.toml` + `uv.lock` back
   `uv sync` for tests/lint; `requirements.txt` is `uv export --no-dev` for pip-only machines.
-- Windows consoles are cp1252: scripts call `sys.stdout.reconfigure(encoding="utf-8")` at import.
-- Long training runs go through `scripts/run_e2_mimo3.py` (resumable via `checklist.csv`/`attempts.csv`).
+- Windows consoles are cp1252: the GOALS 1 scripts call `sys.stdout.reconfigure(encoding="utf-8")` at import.
+- Long training runs go through `notebooks/E2_treinamento_validacao.ipynb` (single notebook: train +
+  validate, joblib/loky one process per attempt, resumable via `attempts.csv`). It replaced
+  `scripts/run_e2_mimo3.py` (deleted; still in git history at `ccd7137`).
+- Commit that notebook **without outputs** (Restart Kernel and Clear Outputs): its tables and plots are
+  derived from the partnership data.

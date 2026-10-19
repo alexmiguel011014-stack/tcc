@@ -45,7 +45,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ```bash
 git clone https://github.com/alexmiguel011014-stack/tcc.git
 cd tcc
-uv run scripts/run_e2_mimo3.py --help     # primeira execução cria o ambiente (~1 min)
+uv sync                                   # cria o ambiente com Python 3.12 (~1-2 min)
 ```
 
 Os scripts têm as dependências declaradas inline (PEP 723): `uv run scripts/<nome>.py` resolve tudo,
@@ -56,45 +56,51 @@ sem `uv sync`. Para os testes/lint do projeto use `uv sync` (lê `pyproject.toml
 ```bash
 py -3.12 -m venv .venv            # Windows; Linux: python3.12 -m venv .venv
 .venv\Scripts\activate            # Linux: source .venv/bin/activate
-pip install -r requirements.txt
-python scripts/run_e2_mimo3.py --help
+pip install -r requirements.txt jupyterlab
+jupyter lab notebooks/E2_treinamento_validacao.ipynb
 ```
 
-Nos dois casos rode os scripts **a partir da raiz do repositório** (eles procuram `Database/` e `src/` por lá).
+O notebook acha a raiz do repositório sozinho (procura `src/mggp.py` subindo na árvore); os scripts do GOALS 1 devem ser rodados a partir da raiz.
 
 ## 3. Rodar
 
-### Experimento E2 — 30 modelos 5×2 + 30 modelos 5×3 do T48, em paralelo
+### Experimento E2 — 30 modelos 5×2 + 30 modelos 5×3 do T48
+
+Um notebook único faz **treinamento e validação**: [`notebooks/E2_treinamento_validacao.ipynb`](notebooks/E2_treinamento_validacao.ipynb).
 
 ```bash
-uv run scripts/run_e2_mimo3.py --config t48 --arms 5x2,5x3 --runs 30
-# sem uv:  python scripts/run_e2_mimo3.py --config t48 --arms 5x2,5x3 --runs 30
+uv run jupyter lab notebooks/E2_treinamento_validacao.ipynb
 ```
+
+Toda a configuração está na primeira célula de código (`CONFIG`, `ARMS`, `RUNS`, `WORKERS`,
+`MAX_CONSEC_FAIL`, `BETA_UNIT`, `SEED`). Rode as células na ordem; a campanha é a célula 5 e o
+resumo com gráficos é a célula 6.
 
 Porta do `TrainingMGGP_LOOP.ipynb` da IC: mesma lib, mesmos parâmetros do T48 (`nDelays [1,2,5,10,25,50]`,
 7 termos, `maxHeight 6`, 300 gerações × 300 indivíduos, MShooting → Free-Run), mesma regra de aprovação
 (`0 < RMSE(Wang 2.2, Free-Run) < 100`). O que muda:
 
-- **Paralelo de verdade.** A lib é single-thread, então o driver dispara **um processo por tentativa** e mantém
-  `--workers` deles ocupados (padrão: todos os núcleos lógicos → CPU a 100 %). Cada worker roda com BLAS/numba
-  em 1 thread para não haver oversubscription. Com núcleos suficientes, as 60 tentativas iniciais sobem de uma vez.
-- **Dois braços numa campanha só** (`--arms 5x2,5x3`): fila única de jobs, contadores independentes por braço.
-  `5x2` reproduz a IC (β = `atan2(v̂y, v̂x)` pós-hoc); `5x3` treina β como 3ª saída (`atan2(col 17, col 18)`, em
-  graus por padrão — `--beta-unit`).
-- **Regra de fracasso** (`--max-consecutive-fail 5`): tentativa falha = free-run da Wang 2.2 explode (inf/NaN/≥ gate)
-  ou o worker quebra. **5 falhas seguidas ⇒ o braço vira `FRACASSO`**: nada mais é lançado para ele e os jobs em voo
-  são encerrados. Uma aprovação zera o contador (não é acumulativo). "Seguidas" = na ordem em que terminam.
-- **Sem desperdício**: em voo ≤ `runs − aprovados`; nunca treina além da meta.
-- **Retomável**: `Ctrl+C` encerra os workers; o mesmo comando continua do `attempts.csv`. Caiu a luz, idem.
-- Cada modelo aprovado é validado Free-Run nas **5 pistas** dentro do próprio worker, e as predições ficam salvas
-  (`predictions/*.npz`) para a análise posterior sem refazer free-run.
+- **Paralelo de verdade.** A lib é single-thread, então cada tentativa roda num processo próprio
+  (joblib/loky) e `WORKERS` deles ficam ocupados — padrão: todos os núcleos lógicos, CPU a 100 %.
+  Cada processo usa 1 thread de BLAS/numba, sem oversubscription.
+- **Dois braços na mesma campanha** (`ARMS = ["5x2", "5x3"]`, nessa ordem): `5x2` reproduz a IC
+  (β = `atan2(v̂y, v̂x)` pós-hoc); `5x3` treina β como 3ª saída (`atan2(col 17, col 18)`, em graus).
+- **Regra de fracasso** (`MAX_CONSEC_FAIL = 5`): tentativa falha quando o Free-Run da Wang 2.2 explode
+  (inf/NaN/≥ `GATE_MAX`) ou o processo quebra. **5 falhas seguidas ⇒ o braço vira `FRACASSO`**: nada mais
+  é lançado e o que está rodando é cancelado. Uma aprovação zera o contador (não é acumulativo).
+  "Seguidas" = na ordem em que as tentativas terminam.
+- **Sem desperdício**: cada leva submete exatamente `RUNS − aprovados` tentativas.
+- **Retomável**: pare o kernel (ou caia a luz) e rode tudo de novo — ele continua do `attempts.csv`.
+- Cada modelo aprovado é validado Free-Run nas **5 pistas** dentro do próprio processo, e as predições
+  ficam salvas (`predictions/*.npz`) para a análise posterior sem refazer free-run.
 
-Antes de lançar a campanha o driver confere as 5 pistas em `Database/` e **aborta na hora** se faltar alguma
-(sem isso, cada tentativa quebraria e o braço marcaria `FRACASSO` por falta de dados, não por instabilidade).
+Antes de lançar a campanha o notebook confere as 5 pistas em `Database/` e **para na hora** se faltar
+alguma (sem isso, cada tentativa quebraria e o braço marcaria `FRACASSO` por falta de dados).
 
-Medir antes de comprometer a máquina: `--runs 1 --workers 1` e ler `seconds` em `attempts.csv`.
+Medir antes de comprometer a máquina: rode uma vez com `RUNS = 1` e `WORKERS = 1`, e leia `seconds`
+em `attempts.csv`.
 
-Saída em `results/e2/t48/<braço>/` (ignorado pelo git):
+Saída em `results/e2/t48/<braço>/` (ignorada pelo git):
 
 | arquivo | conteúdo |
 |---|---|
@@ -104,9 +110,12 @@ Saída em `results/e2/t48/<braço>/` (ignorado pelo git):
 | `relatorio_validacao_rmse.csv` | RMSE por modelo × pista: `Vx`, `Vy`, `beta_out_deg` (só 5x3), `beta_atan2_deg` |
 | `summary_agg.csv` | média ± desvio entre modelos, por pista |
 | `attempts.csv`, `STATUS.txt` | ledger de todas as tentativas (seed, status, RMSE, tempo) e estado do braço |
-| `attempts/attempt_XXX/log.txt` | log completo do treinamento daquela tentativa (`tail -f` para acompanhar) |
+| `attempts/attempt_XXX/log.txt` | log completo do treinamento daquela tentativa |
 
 Para trazer os resultados de volta: copie `results/e2/t48/` inteira (pendrive/drive) — nada disso vai pelo git.
+
+> Ao commitar o notebook, limpe as saídas antes (**Kernel → Restart Kernel and Clear Outputs**):
+> as tabelas e gráficos gerados vêm dos dados da parceria.
 
 ### GOALS 1 — análise do dataset (já feita; reproduzível)
 
@@ -119,7 +128,8 @@ uv run scripts/check_slip_angle.py     # -> docs/slip_angle_provenance.md + docs
 
 ```
 src/          lib mggp vendorizada da IC (@7514bfb) — ver src/VENDORED.md; não editar sem registrar lá
-scripts/      análises e o loop de treinamento
+notebooks/    E2_treinamento_validacao.ipynb — treino + validação (campanha)
+scripts/      análises do dataset (GOALS 1)
 docs/         relatórios gerados pelos scripts
 Database/     dados (git-ignored)
 results/      saídas de treinamento (git-ignored)

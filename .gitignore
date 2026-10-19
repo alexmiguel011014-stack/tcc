@@ -20,3 +20,8 @@ repomix-output.xml
 
 # personal documents dropped in the repo root (registration forms etc.)
 /*.pdf
+
+# Jupyter
+.ipynb_checkpoints/
+notebooks/_smoke_*.ipynb
+notebooks/_out_*.ipynb
