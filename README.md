@@ -117,6 +117,15 @@ Para trazer os resultados de volta: copie `results/e2/t48/` inteira (pendrive/dr
 > Ao commitar o notebook, limpe as saídas antes (**Kernel → Restart Kernel and Clear Outputs**):
 > as tabelas e gráficos gerados vêm dos dados da parceria.
 
+### Exportar no formato do trabalho da IC
+
+[`notebooks/E2_exportar_formato_IC.ipynb`](notebooks/E2_exportar_formato_IC.ipynb) converte `results/e2/t48/` para a
+estrutura `RESULTADOS-N/Treinamento_ID` da IC (`TRAINING/*.pkl`, `modelo_rmse_N.png`, `relatorio_validacao_rmse.csv`
+com `;` e vírgula decimal, `parametros_utilizados.csv`, `checklist_local.xlsx`), em
+`results/e2/t48_formato_IC/RESULTADOS-E2/` — `Treinamento_1` = 5×2, `Treinamento_2` = 5×3. Assim o `BOXPLOT.ipynb` e o
+`mineracao/` antigos leem os resultados novos sem mudança. É **somente leitura** na fonte: pode rodar com a campanha em
+andamento. Extras: `beta_validacao.csv` (RMSE do β) e `tentativas.csv` (seeds e status).
+
 ### GOALS 1 — análise do dataset (já feita; reproduzível)
 
 ```bash
