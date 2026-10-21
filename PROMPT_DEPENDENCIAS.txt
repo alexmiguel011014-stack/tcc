@@ -1,0 +1,115 @@
+PROMPT — PREPARAR O AMBIENTE DO PROJETO TCC
+============================================
+
+Contexto
+--------
+Projeto de TCC (UFLA): estimacao do angulo de deriva (beta) como terceira saida MIMO de um sensor
+virtual baseado em Programacao Genetica Multigene (lib "mggp" da IC, vendorizada em src/).
+O treino roda inteiro no notebook notebooks/E2_treinamento_validacao.ipynb.
+
+Tarefa
+------
+Prepare esta maquina para rodar o projeto: instale as dependencias abaixo, confira os dados e
+valide o ambiente. Nao altere nada em src/ (lib vendorizada) e nao commite nada de Database/.
+
+
+1. Python
+---------
+- Python 3.12 (obrigatorio: >=3.12,<3.13).
+- Motivo: a lib esta pinada em numpy 2.2.6 e numba 0.64.0, que nao rodam no Python 3.13+.
+- Se o Python do sistema for outro (ex.: 3.14), use o uv: ele baixa o 3.12 sozinho.
+
+
+2. Ferramenta de ambiente (recomendado): uv
+-------------------------------------------
+- Windows (PowerShell):
+    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+- Linux / macOS:
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+
+Depois, na raiz do projeto:
+    uv sync
+
+O uv le pyproject.toml + uv.lock e cria o .venv com Python 3.12 e tudo abaixo (leva 1-2 min).
+
+
+3. Dependencias de execucao (versoes exatas)
+--------------------------------------------
+    deap==1.4.3
+    numpy==2.2.6
+    pandas==2.3.3
+    scipy==1.15.3
+    scikit-learn==1.7.2
+    matplotlib==3.10.8
+    numba==0.64.0
+    tqdm==4.67.3
+    joblib==1.5.3
+    ipython==8.38.0
+    openpyxl>=3.1      (le os .xlsx do dataset)
+    dill>=0.3.8        (salva/carrega os modelos .pkl)
+
+Dependencias de desenvolvimento (instaladas pelo "uv sync"):
+    jupyterlab>=4.2    (roda os notebooks)
+    ipykernel>=6.29
+    nbformat>=5.10
+    nbconvert>=7.16
+    pytest>=8
+    ruff>=0.6
+
+
+4. Alternativa sem uv (pip)
+---------------------------
+    py -3.12 -m venv .venv                 (Linux: python3.12 -m venv .venv)
+    .venv\Scripts\activate                 (Linux: source .venv/bin/activate)
+    pip install -r requirements.txt jupyterlab
+
+O requirements.txt cobre so as dependencias de execucao; o jupyterlab entra a parte.
+
+
+5. Dados (nao estao no repositorio)
+-----------------------------------
+Dados de parceria (Wang/Jilin): NUNCA commitar, nunca colar linhas em docs ou chat.
+Copiar os 5 arquivos para a pasta Database/ na raiz do projeto:
+
+    Database/wang21dv_bic_MGGP.xlsx   (treino)
+    Database/wang22dv_bic_MGGP.xlsx   (validacao)
+    Database/wang31dv_bic_MGGP.xlsx   (teste A)
+    Database/wang81dv_bic_MGGP.xlsx   (teste B)
+    Database/wang32dv_bic_MGGP.xlsx   (teste C)
+
+Neste PC eles ja existem em D:\ProjetosPessoais\TCC\Database e em D:\ProjetosPessoais\IC\Database.
+O notebook confere as 5 pistas antes de comecar e para na hora se faltar alguma.
+
+
+6. Hardware e sistema
+---------------------
+- A lib e single-thread; o notebook usa um processo por tentativa (joblib/loky).
+- Por padrao (WORKERS = None) ele ocupa todos os nucleos logicos a 100 %. Para limitar, ajuste WORKERS.
+- Windows: o console e cp1252; os scripts ja chamam sys.stdout.reconfigure(encoding="utf-8").
+
+
+7. Validar o ambiente
+---------------------
+    uv run python -c "import numpy, numba, deap, pandas, scipy, sklearn, joblib, dill, openpyxl; print('ok', numpy.__version__, numba.__version__)"
+    uv run ruff check .
+    uv run pytest
+
+Saida esperada do primeiro comando: "ok 2.2.6 0.64.0".
+(A pasta tests/ ainda nao existe, entao o pytest pode nao coletar nada.)
+
+
+8. Rodar
+--------
+    uv run jupyter lab notebooks/E2_treinamento_validacao.ipynb
+
+Teste rapido antes da campanha completa (primeira celula de codigo do notebook):
+    RUNS = 1
+    WORKERS = 1
+    GENERATIONS = 3
+    POPULATION = 20
+    MAX_SAMPLES = 1500
+Depois de testar, apague results/e2/t48/ e volte esses valores para os de producao
+(RUNS = 30, WORKERS = None, GENERATIONS/POPULATION/MAX_SAMPLES = None).
+
+Ao commitar o notebook, limpe as saidas antes (Kernel > Restart Kernel and Clear Outputs):
+as tabelas e graficos vem dos dados da parceria.
