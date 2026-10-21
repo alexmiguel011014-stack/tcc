@@ -91,7 +91,7 @@ Porta do `TrainingMGGP_LOOP.ipynb` da IC: mesma lib, mesmos parâmetros do T48 (
   "Seguidas" = na ordem em que as tentativas terminam.
 - **Sem desperdício**: cada leva submete exatamente `RUNS − aprovados` tentativas.
 - **Retomável**: pare o kernel (ou caia a luz) e rode tudo de novo — ele continua do `attempts.csv`.
-- **Painel ao vivo**: enquanto a leva roda, uma tabela se atualiza a cada `PAINEL_SEGUNDOS` (5 s) com a geração, o melhor RMSE, o tempo e o ETA de cada tentativa. `⚠ ... sem log (travou?)` aparece se o log de uma tentativa para de crescer por mais de `STALL_SEGUNDOS` (120 s). Só lê o `log.txt` de cada tentativa.
+- **Painel ao vivo** (`PAINEL_MODO`): por padrão (`"stream"`) mostra um log por vez, como a lib mostra rodando sozinha — as últimas gerações (`gen evals min avg max`) e a barra da avaliação em andamento, da tentativa `PAINEL_SEGUIR` (padrão: a primeira em execução) — mais uma linha `outras` com a geração das demais. `"tabela"` mostra uma linha por tentativa. `⚠ ... sem log (travou?)` aparece se um log para de crescer por mais de `STALL_SEGUNDOS` (120 s). Só lê o `log.txt` de cada tentativa.
 - Cada modelo aprovado é validado Free-Run nas **5 pistas** dentro do próprio processo, e as predições
   ficam salvas (`predictions/*.npz`) para a análise posterior sem refazer free-run.
 
