@@ -1,0 +1,106 @@
+PROMPT — CONSERTAR O NOTEBOOK E RETOMAR O BRACO 5x3 DA CAMPANHA E2
+===================================================================
+
+Contexto
+--------
+Projeto de TCC: estimacao do angulo de deriva (beta) como terceira saida MIMO de um sensor virtual
+MGGP (lib da IC vendorizada em src/). A campanha roda em notebooks/E2_treinamento_validacao.ipynb
+(config T48, 30 modelos aprovados por braco: 5x2 = saidas vx,vy · 5x3 = vx,vy,beta).
+Leia CLAUDE.md na raiz antes de mexer em qualquer coisa. Regras que valem aqui:
+- Nao altere src/ . Nao commite Database/ nem results/ (ambos no .gitignore) e nao cole linhas de dados
+  nem series temporais em chat/docs.
+- O notebook so pode ser commitado SEM saidas (Restart Kernel and Clear Outputs).
+- Nao mude parametros, sementes (SEED + n da tentativa), gate (0 < RMSE Wang 2.2 < 100) nem a regra
+  das 5 falhas seguidas. O objetivo e terminar a campanha igual ao que ela seria sem o erro.
+
+Estado (foto de 2026-10-24, tirada de uma copia zip de results/e2/t48 desta maquina — CONFIRA no disco
+antes de agir, pode ter mudado)
+-----------------------------------------------------------------------------------------------------
+- 5x2: concluido, 30/30, STATUS.txt = DONE. NAO mexer.
+- 5x3: results/e2/t48/5x3/attempts.csv tem 22 linhas: 21 approved (modelo_rmse_1..21) + 1 rejected
+  (tentativa 1). Nao existe STATUS.txt. A campanha parou antes de chegar a 30.
+- Foram lancadas 30 tentativas (attempt_001..030). As 8 que NAO estao no attempts.csv:
+    aprovadas, com todos os arquivos (model.pkl, fig.png, predictions.npz, validation.csv,
+    equation.txt, result.json, log.txt):  004, 012, 023, 028, 029, 030
+      (rmse_val no result.json: 0.4428 · 0.6735 · 0.2814 · 0.3403 · 0.3267 · 0.5487)
+    reprovada de verdade (gate com RMSE inf; so log.txt + result.json):  007
+    a que causou o problema:  020  (veja abaixo)
+
+O erro (causa raiz)
+-------------------
+Tentativa 020: passou no gate (RMSE 1.4725 na Wang 2.2) e salvou model.pkl + equation.txt. Depois, na
+validacao nas 5 pistas, o log termina em
+    CRASH ValueError: arange: cannot compute length
+(provavelmente o matplotlib ao plotar predicoes finitas porem gigantes de um modelo que divergiu numa
+pista — CONFIRME re-rodando a validacao, ver passo 4).
+Em treinar_e_validar (notebook, celula 6) o try/except externo captura isso e grava res["error"], mas
+res["approved"] continua True, e fig.png / predictions.npz / validation.csv nunca sao criados.
+Em rodar_campanha (celula 10), o processo principal ve approved=True e faz shutil.move de model.pkl
+(funcionou: o arquivo foi parar em models/modelo_rmse_22.pkl) e depois de fig.png -> FileNotFoundError.
+O processo principal morreu ai, sem gravar a linha no attempts.csv. Como esses workers ainda nao tinham
+a vigia de processo-pai, os que ja estavam rodando terminaram sozinhos e deixaram os 6 modelos
+aprovados e a reprovada 007 so em attempts/ (retomar o notebook assim ignora todos: so o attempts.csv conta,
+ele relancaria 9 tentativas de ~24 h cada em vez de 2).
+Inferencia a verificar: models/modelo_rmse_22.pkl e o modelo da tentativa 020 (mtime dele coincide
+com o dump da 020; compare str(modelo carregado com dill) com equation.txt da attempt_020).
+Modelo aprovado que diverge numa pista NAO e motivo de rejeicao: o desenho e registrar ok=False naquele
+par modelo x pista e seguir (ex.: 5x2 modelo_rmse_9 na Wang 2.1). O bug e so o grafico/artefatos derrubarem tudo.
+
+O que fazer (nesta ordem; pare e relate se algo nao bater com o descrito)
+------------------------------------------------------------------------
+0. Verifique que a campanha NAO esta rodando (nenhum python/loky consumindo CPU, notebook sem celula
+   executando) e que results/e2/t48/5x3 ainda esta como descrito (22 linhas no attempts.csv, sem
+   attempt_031 ou maior). Se a campanha ja foi retomada, PARE e avise o usuario.
+1. BACKUP antes de tudo: copie results/e2/t48 inteiro para results/e2/t48_backup_<data> (nao apague nada;
+   nenhuma pasta attempt_XXX deve ser apagada ao longo do processo).
+2. Corrija o notebook (cirurgico, sem mudar o algoritmo):
+   a) Extraia o bloco "validacao Free-Run nas 5 pistas" de treinar_e_validar para uma funcao que possa ser
+      reusada no passo 4. O grafico NAO pode derrubar a tentativa: plote so valores finitos com |y|<1e4
+      (mascare o resto com NaN) e/ou proteja cada pista com try/except; a linha de metricas (ok=False,
+      RMSE=NaN) continua sendo gravada como hoje.
+   b) Se mesmo assim algo falhar depois do gate, devolva approved=False + error="validacao: ..." — nunca
+      "aprovado sem artefatos".
+   c) Em rodar_campanha, antes do shutil.move confira que model.pkl, fig.png, predictions.npz e
+      validation.csv existem; se faltar, trate como "crashed" (conta como falha seguida, grava a linha) e
+      NUNCA deixe excecao de arquivo matar o laco. Grave o attempts.csv mesmo nesse caminho.
+   d) Rode os testes/lint do projeto (uv run pytest / uv run ruff check, o que existir) e teste a correcao
+      com GENERATIONS=3, POPULATION=20, MAX_SAMPLES=1500 em OUT_DIR temporario (fora de results/e2/t48),
+      inclusive forcando uma divergencia para ver que o grafico nao quebra.
+3. Reconcilie o 5x3 num script/celula avulsa (uma vez so, idempotente, com --dry-run que lista o que faria).
+   Ordem = ordem real de termino (mtime do result.json de cada attempt_XXX; esperado:
+   020, 012, 023, [007 reprovada], 004, 028, 030, 029). Nomes seguem a regra do notebook
+   (modelo_rmse_<n-esimo aprovado>): 020 -> modelo_rmse_22 (o .pkl ja esta la), 012 -> 23, 023 -> 24,
+   004 -> 25, 028 -> 26, 030 -> 27, 029 -> 28. Para cada orfa aprovada (exceto 020):
+   mover model.pkl -> models/, fig.png -> fig/, predictions.npz -> predictions/ (mesmo nome modelo_rmse_N),
+   acrescentar as linhas de validation.csv ao relatorio_validacao_rmse.csv com a coluna Modelo na
+   primeira posicao (igual ao notebook) e acrescentar a linha no attempts.csv (mesmas colunas; started
+   vazio; finished = mtime do result.json no MESMO fuso/formato das linhas existentes — confira com a
+   ultima linha atual, tentativa 14, que deve bater com o mtime do attempts.csv — pois _falhas_no_fim
+   ordena por "finished"). Adicione tambem a 007 como rejected (rmse_val vazio).
+4. Tentativa 020: revalide models/modelo_rmse_22.pkl nas 5 pistas com a MESMA funcao corrigida do
+   passo 2a (carregar com dill; precisa do repo na raiz do sys.path para importar src.mggp), gerando
+   fig/, predictions/ e as linhas no relatorio. Anote em qual pista/saida ela diverge (ok=False).
+   Confira que o rmse_val do result.json (1.4725336...) bate com a media (Vx, Vy, beta_out_deg)/3 da linha
+   "val" recomputada; se nao bater, PARE e relate. Depois grave a linha approved no attempts.csv.
+5. Verifique o resultado (deve dar exatamente): attempts.csv com 30 linhas (28 approved, 2 rejected);
+   models/ fig/ predictions/ com 28 arquivos cada, sem buracos na numeracao; relatorio com 140 linhas
+   (28 modelos x 5 pistas); para todo modelo aprovado, rmse_val do ledger == (RMSE_Vx + RMSE_Vy +
+   RMSE_beta_out_deg)/3 da linha "val" (tolerancia 1e-9); arquivos de modelo_rmse_1..21 identicos ao
+   backup (compare hash). Falhas seguidas no fim do ledger = 0.
+6. Retome a campanha pelo notebook corrigido (CONFIG="t48", ARMS=["5x2","5x3"], RUNS=30; o 5x2 ja esta
+   DONE e e pulado). Devem ser lancadas so 2 tentativas, numeradas 031 e 032 (sementes 2057 e 2058).
+   O params.json sera reescrito (muda "inicio"); o backup guarda o original. Ao terminar, STATUS.txt do
+   5x3 deve dizer DONE com 30/30. Rode a celula de resumo para gerar summary_agg.csv.
+7. Commit do notebook corrigido (SEM saidas) num branch separado, ex. fix/e2-aprovado-sem-artefatos,
+   com o script de reconciliacao se for util manter; nao inclua results/ nem Database/. NAO de push sem o
+   usuario pedir.
+
+Relatorio final (para o usuario)
+--------------------------------
+- Confirmacao do estado encontrado (bateu com a foto acima? algo diferente?).
+- Causa raiz confirmada: qual pista/saida do modelo 020 explodiu e o que exatamente quebrou no grafico.
+- Contagens finais (aprovados/reprovados por braco) e a lista de pares modelo x pista com ok=False.
+- O que mudou no notebook (resumo de 5 linhas) e o hash/branch do commit.
+- Quanto tempo falta ou levou a retomada.
+Depois disso o usuario copia results/e2/t48/ de volta para o outro PC; a analise do beta (5x2 vs 5x3)
+sera feita com ele em conjunto, entao NAO inicie essa analise.

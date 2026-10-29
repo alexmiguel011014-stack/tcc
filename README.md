@@ -128,6 +128,13 @@ com `;` e vírgula decimal, `parametros_utilizados.csv`, `checklist_local.xlsx`)
 `mineracao/` antigos leem os resultados novos sem mudança. É **somente leitura** na fonte: pode rodar com a campanha em
 andamento. Extras: `beta_validacao.csv` (RMSE do β) e `tentativas.csv` (seeds e status).
 
+### Análise do β (5×2 + atan2 vs 5×3)
+
+[`notebooks/E2_analise_beta.ipynb`](notebooks/E2_analise_beta.ipynb) executa o plano de análise de `GOALS.md` (GOALS 3 →
+Evaluation) sobre `results/e2/t48/` — só lê `predictions/*.npz`, os CSVs e `equation.txt`, sem precisar do `Database/`.
+Escreve tabelas agregadas e figuras em `results/e2/t48/analise/` (git-ignored) e carimba tudo como **PRELIMINAR** enquanto
+algum braço não estiver `DONE` com os 30 aprovados. Outra pasta: `E2_RESULTS_DIR=<pasta> uv run jupyter nbconvert --execute ...`.
+
 ### GOALS 1 — análise do dataset (já feita; reproduzível)
 
 ```bash
@@ -139,7 +146,7 @@ uv run scripts/check_slip_angle.py     # -> docs/slip_angle_provenance.md + docs
 
 ```
 src/          lib mggp vendorizada da IC (@7514bfb) — ver src/VENDORED.md; não editar sem registrar lá
-notebooks/    E2_treinamento_validacao.ipynb — treino + validação (campanha)
+notebooks/    E2_treinamento_validacao.ipynb — treino + validação (campanha) · E2_analise_beta.ipynb — análise do β
 scripts/      análises do dataset (GOALS 1)
 docs/         relatórios gerados pelos scripts
 Database/     dados (git-ignored)
