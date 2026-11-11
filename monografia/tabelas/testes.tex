@@ -1,0 +1,29 @@
+\begin{table}[htbp]
+    \centering
+    \caption{Testes confirmatórios nas pistas de teste: diferença de medianas com IC95\% \textit{bootstrap}, tamanho de efeito e valor-p corrigido por Holm em cada família.}
+    \label{tab:testes}
+    \scriptsize
+    \begin{tabular}{lllcccrc}
+        \toprule
+        \textbf{Q} & \textbf{Comparação} & \textbf{Pista} & $n_1/n_2$ & \textbf{Dif.} & \textbf{IC95\%} & \textbf{Efeito} & \textbf{p (Holm)} \\
+        \midrule
+        Q1 & $\beta$: 5×3 atan2 $-$ 5×2 & Wang 3.1 & 28/30 & $-$0,062 & [$-$0,175; 0,128] & $-$0,00 & 1,0000 \\
+        Q1 & $\beta$: 5×3 atan2 $-$ 5×2 & Wang 8.1 & 28/30 & 0,072 & [$-$0,158; 0,217] & 0,10 & 1,0000 \\
+        Q1 & $\beta$: 5×3 atan2 $-$ 5×2 & Wang 3.2 & 28/30 & $-$0,639 & [$-$0,904; $-$0,291] & $-$0,50 & 0,0056 \\
+        Q1 & $\beta$: 5×3 saída 3 $-$ 5×2 & Wang 3.1 & 28/30 & $-$0,097 & [$-$0,199; 0,026] & $-$0,15 & 1,0000 \\
+        Q1 & $\beta$: 5×3 saída 3 $-$ 5×2 & Wang 8.1 & 28/30 & 0,048 & [$-$0,171; 0,168] & 0,06 & 1,0000 \\
+        Q1 & $\beta$: 5×3 saída 3 $-$ 5×2 & Wang 3.2 & 28/30 & $-$0,641 & [$-$0,903; $-$0,362] & $-$0,59 & 0,0007 \\
+        Q2 & $v_x$: 5×3 $-$ 5×2 & Wang 3.1 & 28/30 & 0,028 & [$-$0,087; 0,150] & 0,11 & 0,4887 \\
+        Q2 & $v_x$: 5×3 $-$ 5×2 & Wang 8.1 & 28/30 & 0,093 & [0,026; 0,219] & 0,59 & 0,0006 \\
+        Q2 & $v_x$: 5×3 $-$ 5×2 & Wang 3.2 & 28/30 & 0,256 & [0,137; 0,295] & 0,84 & $<$0,0001 \\
+        Q2 & $v_y$: 5×3 $-$ 5×2 & Wang 3.1 & 28/30 & 0,033 & [$-$0,007; 0,062] & 0,34 & 0,1022 \\
+        Q2 & $v_y$: 5×3 $-$ 5×2 & Wang 8.1 & 28/30 & 0,022 & [$-$0,035; 0,070] & 0,18 & 0,4678 \\
+        Q2 & $v_y$: 5×3 $-$ 5×2 & Wang 3.2 & 28/30 & $-$0,068 & [$-$0,121; $-$0,020] & $-$0,24 & 0,3647 \\
+        Q3 & $\beta$: saída 3 $-$ atan2 (5×3) & Wang 3.1 & 28/28 & $-$0,004 & [$-$0,020; $-$0,002] & 0,89 & 0,0002 \\
+        Q3 & $\beta$: saída 3 $-$ atan2 (5×3) & Wang 8.1 & 28/28 & $-$0,017 & [$-$0,027; $-$0,007] & 0,71 & 0,1128 \\
+        Q3 & $\beta$: saída 3 $-$ atan2 (5×3) & Wang 3.2 & 28/28 & $-$0,002 & [$-$0,009; 0,001] & 0,68 & 0,2545 \\
+        \bottomrule
+    \end{tabular}
+    \par\footnotesize Nota: Q1 e Q2: Mann--Whitney, efeito = $\delta$ de Cliff (negativo: o 5×3 erra menos). Q3: Wilcoxon pareado por modelo, diferença = mediana das diferenças, efeito = fração de modelos em que a saída 3 erra menos. RMSE de $\beta$ em graus; de $v_x$, $v_y$ em m/s.
+    \fonte{Elaboração própria.}
+\end{table}

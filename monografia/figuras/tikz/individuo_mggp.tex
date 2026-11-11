@@ -1,0 +1,40 @@
+% Indivíduo MGGP NARX MIMO com três saídas (v_x, v_y, beta).
+% Cada saída é theta_0 + soma de theta_i * g_i; as saídas atrasadas realimentam todas as árvores.
+\begin{tikzpicture}[font=\small, >={Stealth[length=2mm]},
+    op/.style={circle, draw, fill=black!10, minimum size=7mm, inner sep=0pt, font=\footnotesize},
+    term/.style={rectangle, draw, fill=white, minimum size=6mm, inner sep=1.5pt, font=\footnotesize},
+    soma/.style={rectangle, rounded corners=3pt, draw, thick, fill=black!5, align=center, minimum height=9mm},
+    level distance=9mm, level 1/.style={sibling distance=13mm}, level 2/.style={sibling distance=8mm},
+    edge from parent/.style={draw}]
+
+  % três genes de exemplo, um por saída
+  \node[op] (g1) at (0,0) {$q_2$} child {node[op] {add} child {node[term] {$u_1$}} child {node[term] {$y_1$}}};
+  \node[op] (g2) at (4.6,0) {mul} child {node[term] {$u_5$}} child {node[op] {$q_5$} child {node[term] {$y_1$}}};
+  \node[op] (g3) at (9.2,0) {sub} child {node[term] {$u_2$}} child {node[op] {$q_1$} child {node[term] {$y_3$}}};
+
+  \node[above=1mm of g1, font=\footnotesize] {gene $g_{1,i}$};
+  \node[above=1mm of g2, font=\footnotesize] {gene $g_{2,i}$};
+  \node[above=1mm of g3, font=\footnotesize] {gene $g_{3,i}$};
+
+  % combinação linear por saída
+  \node[soma] (s1) at (0,-4.0) {$\hat v_x[k] = \theta_{1,0} + \sum_i \theta_{1,i}\, g_{1,i}$};
+  \node[soma] (s2) at (4.6,-4.0) {$\hat v_y[k] = \theta_{2,0} + \sum_i \theta_{2,i}\, g_{2,i}$};
+  \node[soma] (s3) at (9.2,-4.0) {$\hat\beta[k] = \theta_{3,0} + \sum_i \theta_{3,i}\, g_{3,i}$};
+  \draw[->] (0,-3.0) -- (s1);
+  \draw[->] (4.6,-3.0) -- (s2);
+  \draw[->] (9.2,-3.0) -- (s3);
+
+  % realimentação: saídas atrasadas viram terminais y_1, y_2, y_3 de todas as árvores
+  \node[term, minimum width=46mm] (fb) at (4.6,-5.6) {$y_1, y_2, y_3$ = saídas atrasadas (\textit{Free-run})};
+  \draw[->, dashed] (s1.south) |- (fb.west);
+  \draw[->, dashed] (s2.south) -- (fb.north);
+  \draw[->, dashed] (s3.south) |- (fb.east);
+  \draw[->, dashed] (fb.east) ++(0,-0.15) -- (12.2,-5.75) -- (12.2,1.35) -- (-1.6,1.35) -- (-1.6,-1.7)
+    node[pos=0.5, above, font=\footnotesize, at start] {};
+  \node[font=\footnotesize, fill=white, inner sep=1pt] at (5.3,1.35) {terminais $y_1, y_2, y_3$ de todos os genes};
+
+  % legenda dos terminais
+  \node[align=left, font=\footnotesize, anchor=north west] at (-1.3,-6.3)
+    {$u_1 = a_x$,\ $u_2 = a_y$,\ $u_3, u_4$ = velocidades das rodas,\ $u_5 = \dot\psi$;\quad
+     $q_d$ = atraso de $d$ amostras.};
+\end{tikzpicture}

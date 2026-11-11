@@ -1,0 +1,16 @@
+\apendice{Parâmetros completos e reprodutibilidade}\label{apen:reprodutibilidade}
+
+Os parâmetros do algoritmo e do protocolo de treinamento estão na \autoref{tab:parametros}. A implementação do MGGP é a biblioteca em Python desenvolvida no grupo de pesquisa e usada na IC, incorporada ao repositório deste trabalho sem alterações, na versão correspondente ao \textit{commit} \texttt{7514bfb} do repositório da IC.
+
+O código deste trabalho está disponível em \url{https://github.com/alexmiguel011014-stack/tcc}. Os arquivos relevantes são:
+
+\begin{alineas}
+    \item \texttt{notebooks/E2\_treinamento\_validacao.ipynb}: treinamento e validação dos braços 5×2 e 5×3;
+    \item \texttt{notebooks/E2\_analise\_beta.ipynb}: análise estatística, a partir dos arquivos de predição gerados no treinamento;
+    \item \texttt{scripts/reproduce\_ic.py}: reavaliação dos modelos T48 e T19 da IC nas cinco pistas;
+    \item \texttt{scripts/run\_e1b\_cinematico.py}: estimador cinemático de $\beta$;
+    \item \texttt{scripts/inspect\_equations.py}: expansão algébrica das equações de $\beta$;
+    \item \texttt{scripts/monografia\_figuras.py} e \texttt{scripts/monografia\_tabelas.py}: geração das figuras e tabelas deste texto.
+\end{alineas}
+
+A semente aleatória de cada tentativa é $2026$ somada ao número da tentativa, igual nos dois braços. A base de dados experimental pertence à parceria com a Universidade de Jilin e não é distribuída com o código.

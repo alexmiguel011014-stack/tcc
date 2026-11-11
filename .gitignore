@@ -21,6 +21,24 @@ repomix-output.xml
 # personal documents dropped in the repo root (registration forms etc.)
 /*.pdf
 
+# monograph: LaTeX build outputs and figures derived from the partnership data (CLAUDE.md)
+monografia/**/*.aux
+monografia/**/*.log
+monografia/**/*.out
+monografia/**/*.toc
+monografia/**/*.lo[ftq]
+monografia/**/*.bbl
+monografia/**/*.blg
+monografia/**/*.fdb_latexmk
+monografia/**/*.fls
+monografia/**/*.synctex.gz
+monografia/**/*.gl[gos]
+monografia/**/*.ac[nr]
+monografia/**/*.ist
+monografia/main.pdf
+monografia/figuras/dados/
+dist/
+
 # Jupyter
 .ipynb_checkpoints/
 notebooks/_smoke_*.ipynb

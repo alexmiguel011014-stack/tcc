@@ -1,0 +1,96 @@
+\chapter{MATERIAL E MÉTODOS}\label{sec:metodos}
+
+Esta seção descreve a base de dados, a definição do ângulo de deriva de referência, a configuração do MGGP, o desenho experimental, o protocolo de treinamento e o plano de análise estatística.
+
+\section{Base de dados}\label{sec:base_dados}
+
+A base de dados, a mesma utilizada na IC, resulta de uma parceria com a Universidade de Jilin, na China. Os ensaios foram realizados com um veículo instrumentado, no qual um sistema GPS/INS, com a unidade inercial próxima ao centro de massa, fornece a referência das velocidades; o veículo dispõe ainda de transdutores de força e de sensores de pneus inteligentes, não utilizados neste estudo.
+
+A base de dados é composta por cinco ensaios, denominados Wang 2.1, Wang 2.2, Wang 3.1, Wang 8.1 e Wang 3.2, realizados em condições de direção aleatórias (\textit{Random Driving Conditions}) e amostrados a 200~Hz. Cinco variáveis são utilizadas como entradas dos modelos:
+
+\begin{alineas}
+    \item aceleração longitudinal, $a_x$ (m/s²);
+    \item aceleração lateral, $a_y$ (m/s²);
+    \item velocidade angular da roda dianteira, $\omega_f$ (rad/s);
+    \item velocidade angular da roda traseira, $\omega_r$ (rad/s);
+    \item taxa de guinada, $\dot\psi$ (rad/s).
+\end{alineas}
+
+As velocidades longitudinal ($v_x$) e lateral ($v_y$), em m/s, medidas pelo sistema GPS/INS, são as saídas de referência. Na notação da biblioteca, as entradas são $u_1$ a $u_5$, na ordem acima, e as saídas são $y_1 = v_x$, $y_2 = v_y$ e, nos modelos com três saídas, $y_3 = \beta$. As velocidades das rodas são velocidades angulares; nos dados, $v_x$ é aproximadamente proporcional à velocidade da roda traseira, com fator de 0,2988~m/rad (ajustado por mínimos quadrados no ensaio Wang 2.1), compatível com o raio efetivo do pneu.
+
+O comportamento temporal das variáveis do ensaio de treinamento é exibido na \autoref{fig:sinais_wang21}, e a \autoref{tab:pistas} resume o papel de cada ensaio no experimento. O ensaio Wang 2.1 é usado no treinamento; o Wang 2.2, na aprovação dos modelos (\autoref{sec:protocolo}); e os ensaios Wang 3.1, Wang 8.1 e Wang 3.2 não participam de nenhuma decisão de treinamento deste trabalho e constituem as pistas de teste. Ressalta-se, porém, que a configuração T48, herdada da IC, foi escolhida naquela pesquisa observando o desempenho nas pistas Wang 2.1 a 8.1. Assim, a Wang 3.2, que não havia sido utilizada na IC, é a única pista de teste totalmente independente da escolha dos hiperparâmetros.
+
+\begin{figure}[htbp]
+    \centering
+    \caption{Variáveis do ensaio de treinamento (Wang 2.1): aceleração longitudinal (a), aceleração lateral (b), velocidade angular da roda dianteira (c) e traseira (d), taxa de guinada (e), velocidade longitudinal (f), velocidade lateral (g) e ângulo de deriva de referência (h).}
+    \label{fig:sinais_wang21}
+    \includegraphics[width=\textwidth]{figuras/dados/sinais_wang21.pdf}
+    \fonte{Elaboração própria com dados da Universidade de Jilin.}
+\end{figure}
+
+\input{tabelas/pistas}
+
+\section{Definição e proveniência do ângulo de deriva}\label{sec:proveniencia}
+
+A base de dados contém duas colunas de ângulo de deriva: uma bruta, em graus, e uma suavizada, em radianos. Antes de usá-las, investigou-se se elas correspondem a uma medição independente ou a um cálculo a partir das velocidades. A verificação mostrou que a coluna bruta coincide, até a precisão de ponto flutuante, com $\operatorname{atan2}(v_y, v_x)$ do par bruto de velocidades em quatro dos cinco ensaios, e que a coluna suavizada é uma média móvel de cerca de 21 amostras (aproximadamente 100~ms) da coluna bruta. Ou seja, o ângulo de deriva disponível na base é \emph{calculado} a partir das velocidades, e não carrega informação adicional em relação a elas.
+
+A verificação revelou também que, nos ensaios Wang 3.1, Wang 8.1 e Wang 3.2, a velocidade lateral usada como saída na IC e neste trabalho é maior, por uma constante de $+0{,}31$, $+0{,}37$ e $+0{,}31$~m/s, respectivamente, do que a velocidade lateral implícita na coluna bruta de ângulo de deriva. Nos ensaios Wang 3.1 e Wang 3.2, a coluna bruta coincide com a velocidade lateral bruta e o deslocamento aparece na velocidade suavizada; no ensaio Wang 8.1, as velocidades bruta e suavizada coincidem entre si e divergem da coluna de ângulo de deriva. Não foi possível determinar qual das colunas está correta. A coluna suavizada de ângulo de deriva não foi recalculada após esse deslocamento. Para manter a coerência entre as três saídas, adota-se como referência o ângulo da \autoref{eq:beta}, calculado a partir do mesmo par de velocidades suavizadas usado como saída. O painel (h) da \autoref{fig:sinais_wang21} mostra $\beta$ no ensaio de treinamento: em 90\% do tempo, o ângulo fica entre $-6{,}8^\circ$ e $+1{,}7^\circ$, e atinge $-11{,}6^\circ$ na manobra mais severa. A consequência dessa definição para a análise é discutida na \autoref{sec:limitacoes}.
+
+\section{Configuração do MGGP}\label{sec:config_mggp}
+
+O algoritmo MGGP foi adotado para estimar simultaneamente as saídas do veículo, caracterizando uma abordagem MIMO. O mesmo conjunto de entradas defasadas alimenta todas as árvores, e os valores atrasados de todas as saídas são terminais disponíveis para todas elas (\autoref{sec:mggp}). A implementação é a mesma biblioteca em Python da IC, sem alterações (\textit{commit} \texttt{7514bfb} do repositório da IC). O código deste trabalho, com os cadernos de treinamento e de análise, está disponível em \url{https://github.com/alexmiguel011014-stack/tcc}; a base de dados, que pertence à parceria com a Universidade de Jilin, não é distribuída com ele.
+
+Os hiperparâmetros estruturais são os da configuração T48, a melhor da IC: atrasos $[1, 2, 5, 10, 25, 50]$, sete termos por saída e profundidade máxima seis. Os demais parâmetros evolutivos também são os da IC e estão reunidos na \autoref{tab:parametros}. Os operadores disponíveis são apenas adição, subtração e multiplicação; em particular, não há divisão, de modo que a razão $v_y/v_x$ da \autoref{eq:beta} não pode ser representada de forma exata por um gene.
+
+\input{tabelas/parametros}
+
+\section{Desenho experimental}\label{sec:desenho}
+
+O experimento compara dois braços, ambos com a configuração T48:
+
+\begin{alineas}
+    \item braço 5×2: modelos com cinco entradas e duas saídas ($v_x$, $v_y$), como na IC;
+    \item braço 5×3: modelos com as mesmas cinco entradas e três saídas ($v_x$, $v_y$, $\beta$), em que $\beta$ é treinado como saída do modelo.
+\end{alineas}
+
+A partir desses braços, avaliam-se três estimativas do ângulo de deriva:
+
+\begin{alineas}
+    \item A: $\hat\beta = \operatorname{atan2}(\hat v_y, \hat v_x)$, calculado a partir das velocidades estimadas pelos modelos 5×2;
+    \item B\textsubscript{saída}: a terceira saída evoluída dos modelos 5×3;
+    \item B\textsubscript{atan2}: $\operatorname{atan2}(\hat v_y, \hat v_x)$, calculado a partir das velocidades estimadas pelos próprios modelos 5×3.
+\end{alineas}
+
+Como a aptidão do MGGP é a média simples dos RMSE das saídas, sem normalização (\autoref{sec:mggp}), a escala de cada saída determina o seu peso na evolução. Em radianos, o desvio-padrão de $\beta$ é da ordem de 0,04, enquanto o de $v_x$ é de cerca de 5~m/s no ensaio de treinamento; $\beta$ seria praticamente ignorado pela função de aptidão. Por isso, no braço 5×3, $\beta$ é treinado em graus, escala em que seu erro tem a mesma ordem de grandeza dos erros das velocidades em m/s.
+
+\section{Protocolo de treinamento e aprovação}\label{sec:protocolo}
+
+Cada braço foi treinado em 30 execuções independentes, com sementes aleatórias definidas pelo número da tentativa (semente $= 2026 +$ tentativa, iguais nos dois braços). Cada execução treina o modelo no ensaio Wang 2.1 com avaliação \textit{multi-shooting} e, ao final das 300 gerações, aplica ao melhor indivíduo o critério de aprovação da IC: o modelo é aprovado se o seu RMSE em simulação livre no ensaio Wang 2.2 for finito, positivo e menor que 100. Modelos aprovados são então simulados livremente nos cinco ensaios. Um braço seria declarado em fracasso se ocorressem cinco reprovações seguidas.
+
+No braço 5×2, as 30 tentativas foram aprovadas. No braço 5×3, uma falha do programa de treinamento interrompeu a campanha. \pendente{descrever com precisão: quantas tentativas foram afetadas, o que foi refeito, se as mesmas sementes foram reutilizadas e em que momento a decisão de encerrar o braço foi registrada}. O braço foi encerrado com 28 modelos aprovados e 2 reprovados (RMSE de validação da ordem de $6\times10^{4}$ e infinito). As análises das seções seguintes usam apenas os modelos aprovados; a diferença de robustez entre os braços (0 de 30 reprovações contra 2 de 30) é discutida na \autoref{sec:limitacoes}.
+
+\section{Métricas e análise estatística}\label{sec:analise}
+
+O desempenho é medido pelo RMSE, definido por
+\begin{equation}
+    \mathrm{RMSE} = \sqrt{\frac{1}{N} \sum_{i=1}^{N} (y_i - \hat y_i)^2},
+    \label{eq:rmse}
+\end{equation}
+em que $y_i$ é o valor de referência na amostra $i$, $\hat y_i$ é a estimativa correspondente e $N$ é o número de amostras da pista. O RMSE é expresso na unidade da grandeza estimada, penaliza mais os erros grandes e, ao contrário de métricas percentuais, permanece bem definido quando $v_y$ e $\beta$ cruzam o zero. Ele é calculado em simulação livre, por pista e por saída: em m/s para $v_x$ e $v_y$ e em graus para $\beta$. Para $\beta$, calculam-se também o viés (erro médio) e o RMSE por quartil de $|\beta|$ e de $v_x$ de cada pista, para verificar em que regime de operação o erro se concentra. Como referência de escala, calculam-se duas linhas de base sem modelo: $\hat\beta = 0$ e $\hat\beta$ igual à média de $\beta$ na pista de treino.
+
+O plano de análise foi definido e registrado antes do processamento dos resultados finais. O plano de análise foi registrado em \pendente{local e data, por exemplo hash do commit no repositório}. A unidade de análise é o par modelo × pista. Os modelos de cada braço são tratados como amostras independentes: as sementes não pareiam os braços, pois os modelos com duas e com três saídas consomem a sequência aleatória de formas diferentes. Pares cuja simulação livre divergiu (estimativas não finitas ou com módulo acima de $10^4$) são excluídos da estatística daquela pista, e o número de divergências é sempre reportado.
+
+A evidência principal vem das três pistas de teste. A pista Wang 2.2 foi usada para aprovar os modelos e, por isso, é enviesada; a Wang 2.1 é a pista de treino. Ambas são apresentadas como exploratórias. Três perguntas são avaliadas, com nível de significância de 5\% em testes bilaterais:
+
+\begin{alineas}
+    \item Q1 --- a terceira saída melhora $\beta$? Compara-se o RMSE de $\beta$ de B\textsubscript{saída} e de B\textsubscript{atan2} com o de A, pelo teste de Mann--Whitney;
+    \item Q2 --- a terceira saída altera $v_x$ e $v_y$? Compara-se o RMSE de cada velocidade entre os braços 5×3 e 5×2, pelo teste de Mann--Whitney;
+    \item Q3 --- dentro de um mesmo modelo 5×3, a saída evoluída difere do ângulo pós-calculado? Compara-se B\textsubscript{saída} com B\textsubscript{atan2}, pelo teste de Wilcoxon pareado por modelo.
+\end{alineas}
+
+Em cada pergunta, os valores-p das pistas de teste são corrigidos pelo método de Holm. A família de Holm de cada pergunta reúne todos os testes de suas pistas de teste: seis testes em Q1 (duas variantes do braço 5×3 contra a variante A, em três pistas), seis em Q2 ($v_x$ e $v_y$, em três pistas) e três em Q3. Cada teste é acompanhado da diferença de medianas (ou da mediana das diferenças, no caso pareado), com intervalo de confiança de 95\% obtido por \textit{bootstrap} com 10\,000 reamostragens, e de um tamanho de efeito: o $\delta$ de Cliff, que varia de $-1$ a $+1$ e é negativo quando o braço 5×3 erra menos, para Q1 e Q2, e a fração de modelos em que a saída evoluída erra menos, para Q3.
+Para situar os resultados, avaliam-se ainda três referências: os modelos T48 e T19 da IC (este último a configuração de melhor custo-benefício daquela pesquisa), com $\beta$ pós-calculado, nas cinco pistas, inclusive a Wang 3.2; e um estimador cinemático, que integra a \autoref{eq:beta_cinematica} com $v_x$ estimado a partir da velocidade da roda traseira, sem nenhum treinamento além do fator de escala e da convenção de sinal da taxa de guinada, ambos ajustados apenas na pista de treino. Por fim, as equações de $\beta$ dos modelos 5×3 são expandidas algebricamente e seus termos são comparados com a \autoref{eq:beta_cinematica} discretizada.
+
+Duas verificações adicionais, não previstas no plano de análise original e realizadas após o seu processamento, são tratadas como análise de sensibilidade. A primeira reavalia, sem retreinamento, os modelos já treinados contra uma referência em que o deslocamento de $v_y$ da \autoref{sec:proveniencia} é subtraído antes do cálculo de $\beta$; o deslocamento de cada pista de teste é estimado como a mediana da diferença entre a $v_y$ de referência e a velocidade lateral implícita na coluna bruta de ângulo de deriva. Nessa reavaliação, a comparação de Q1 é repetida com o mesmo teste e a mesma correção de Holm, e reporta-se também o RMSE após remover o viés. A segunda é uma linha de base linear: um modelo com as mesmas entradas e os mesmos atrasos dos modelos MGGP, ajustado por mínimos quadrados na pista de treino, com e sem realimentação das saídas estimadas.
+
+A ausência de diferença significativa não demonstra equivalência. Por isso, ao descrever resultados sem diferença, são reportados os intervalos de confiança, que indicam a ordem de grandeza das diferenças que os dados não permitem excluir. Os testes avaliam a variabilidade entre execuções independentes (sementes) dentro de cada pista; como há apenas três pistas de teste, eles não medem a variabilidade entre cenários de condução.

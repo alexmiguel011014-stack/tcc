@@ -1,0 +1,19 @@
+\begin{table}[htbp]
+    \centering
+    \caption{RMSE de $\beta$ (graus) do estimador cinemático, dos modelos de referência da IC (T48 e T19, $\beta$ pós-calculado) e mediana dos modelos da campanha.}
+    \label{tab:referencias_beta}
+    \footnotesize
+    \begin{tabular}{lccccc}
+        \toprule
+        \textbf{Pista} & \textbf{Cinemático} & \textbf{IC T48} & \textbf{IC T19} & \textbf{5×2 + atan2} & \textbf{5×3, saída 3} \\
+        \midrule
+        Wang 2.1 (treino) & 22,395 & 1,506 & 1,624 & 1,647 & 1,527 \\
+        Wang 2.2 (validação) & 2,076 & 0,448 & 0,708 & 0,609 & 0,776 \\
+        Wang 3.1 (teste A) & 3,213 & 0,700 & 0,952 & 0,979 & 0,882 \\
+        Wang 8.1 (teste B) & 2,899 & 1,334 & 1,367 & 1,434 & 1,482 \\
+        Wang 3.2 (teste C) & 1,179 & 1,523 & 1,447 & 1,738 & 1,098 \\
+        \bottomrule
+    \end{tabular}
+    \par\footnotesize Nota: cinemático: integração de $\dot\beta = a_y/\hat v_x + \dot\psi$ com $\hat v_x$ proporcional à velocidade da roda traseira, sem realimentação de medição; sinal do termo de guinada escolhido na pista de treino. T48 e T19 foram selecionados pela IC olhando as pistas Wang 2.1 a 8.1.
+    \fonte{Elaboração própria.}
+\end{table}

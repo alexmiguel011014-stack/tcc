@@ -1,0 +1,23 @@
+\begin{table}[htbp]
+    \centering
+    \caption{RMSE de $v_x$ e $v_y$ (m/s) por pista e braço: mediana e intervalo interquartil entre os modelos.}
+    \label{tab:resumo_vel}
+    \footnotesize
+    \begin{tabular}{llrcccc}
+        \toprule
+        \textbf{Pista} & \textbf{Braço} & $n$ & \multicolumn{2}{c}{$v_x$} & \multicolumn{2}{c}{$v_y$} \\
+        \midrule
+        Wang 2.1 (treino) & 5×2 & 29 & 0,610 & [0,547; 0,723] & 0,231 & [0,221; 0,253] \\
+         & 5×3 & 27 & 0,607 & [0,430; 0,690] & 0,245 & [0,226; 0,270] \\
+        Wang 2.2 (validação) & 5×2 & 30 & 0,299 & [0,272; 0,405] & 0,169 & [0,138; 0,194] \\
+         & 5×3 & 28 & 0,489 & [0,306; 0,729] & 0,195 & [0,180; 0,221] \\
+        Wang 3.1 (teste A) & 5×2 & 30 & 0,550 & [0,465; 0,623] & 0,209 & [0,180; 0,248] \\
+         & 5×3 & 28 & 0,579 & [0,434; 0,712] & 0,242 & [0,207; 0,277] \\
+        Wang 8.1 (teste B) & 5×2 & 30 & 0,162 & [0,121; 0,191] & 0,376 & [0,327; 0,448] \\
+         & 5×3 & 28 & 0,255 & [0,180; 0,405] & 0,397 & [0,358; 0,439] \\
+        Wang 3.2 (teste C) & 5×2 & 30 & 0,104 & [0,092; 0,130] & 0,283 & [0,219; 0,356] \\
+         & 5×3 & 28 & 0,359 & [0,228; 0,428] & 0,215 & [0,196; 0,307] \\
+        \bottomrule
+    \end{tabular}
+    \fonte{Elaboração própria.}
+\end{table}

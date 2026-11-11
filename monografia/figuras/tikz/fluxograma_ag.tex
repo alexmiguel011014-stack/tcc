@@ -1,0 +1,25 @@
+% Fluxograma de um algoritmo genético clássico (redesenho vetorial da figura da IC).
+\begin{tikzpicture}[
+    node distance=7mm and 12mm,
+    passo/.style={rectangle, rounded corners=3pt, draw, fill=black!8, align=center,
+                  minimum width=30mm, minimum height=9mm, font=\small},
+    decisao/.style={diamond, aspect=1.6, draw, fill=black!15, align=center, inner sep=1pt, font=\small},
+    seta/.style={-{Stealth[length=2.2mm]}, thick}]
+  \node[passo] (pop)  {População\\inicial};
+  \node[passo, right=of pop] (fit) {Cálculo da\\aptidão (\textit{fitness})};
+  \node[passo, right=of fit] (sel) {Seleção};
+  \node[passo, below=of sel] (cru) {Cruzamento\\(\textit{crossover})};
+  \node[passo, below=of cru] (mut) {Mutação};
+  \node[passo, left=of mut] (nova) {Nova\\população};
+  \node[decisao, left=of nova] (crit) {Critério de\\parada\\satisfeito?};
+  \node[passo, below=10mm of crit] (fim) {Retorna a\\melhor solução};
+
+  \draw[seta] (pop) -- (fit);
+  \draw[seta] (fit) -- (sel);
+  \draw[seta] (sel) -- (cru);
+  \draw[seta] (cru) -- (mut);
+  \draw[seta] (mut) -- (nova);
+  \draw[seta] (nova) -- (crit);
+  \draw[seta] (crit) -- node[right, font=\small] {Sim} (fim);
+  \draw[seta] (crit.north) -- ++(0,4mm) -| node[pos=0.25, above, font=\small] {Não} (fit.south);
+\end{tikzpicture}

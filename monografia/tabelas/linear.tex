@@ -1,0 +1,19 @@
+\begin{table}[htbp]
+    \centering
+    \caption{RMSE de $\beta$ (graus) de um modelo linear de mesmas entradas e atrasos, sem realimentação das saídas, e mediana dos modelos MGGP.}
+    \label{tab:linear}
+    \footnotesize
+    \begin{tabular}{lcccc}
+        \toprule
+        \textbf{Pista} & \textbf{Linear 5×2 + atan2} & \textbf{Linear 5×3, saída 3} & \textbf{MGGP 5×2 + atan2} & \textbf{MGGP 5×3, saída 3} \\
+        \midrule
+        Wang 2.1 (treino) & 2,093 & 1,991 & 1,647 & 1,527 \\
+        Wang 2.2 (validação) & 2,144 & 2,040 & 0,609 & 0,776 \\
+        Wang 3.1 (teste A) & 1,868 & 1,807 & 0,979 & 0,882 \\
+        Wang 8.1 (teste B) & 3,812 & 3,996 & 1,434 & 1,482 \\
+        Wang 3.2 (teste C) & 2,105 & 2,052 & 1,738 & 1,098 \\
+        \bottomrule
+    \end{tabular}
+    \par\footnotesize Nota: o modelo linear usa as entradas nos atrasos $[1, 2, 5, 10, 25, 50]$ ajustado por mínimos quadrados na pista de treino; a versão com realimentação das saídas divergiu na simulação livre.
+    \fonte{Elaboração própria.}
+\end{table}

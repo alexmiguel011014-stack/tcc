@@ -1,0 +1,23 @@
+\begin{table}[htbp]
+    \centering
+    \caption{RMSE de $\beta$ (graus) nas pistas de teste, mediana entre modelos, contra a referência original e contra a referência com o deslocamento de $v_y$ removido; com e sem o viés.}
+    \label{tab:reavaliacao}
+    \small
+    \begin{tabular}{llcccc}
+        \toprule
+        \textbf{Pista} & \textbf{Variante} & \multicolumn{2}{c}{\textbf{Referência original}} & \multicolumn{2}{c}{\textbf{Referência corrigida}} \\ & & RMSE & RMSE sem viés & RMSE & RMSE sem viés \\
+        \midrule
+        Wang 3.1 (teste A) & 5×2 + atan2 & 0,979 & 0,673 & 0,909 & 0,683 \\
+         & 5×3, saída 3 & 0,882 & 0,645 & 1,071 & 0,861 \\
+         & 5×3 + atan2 & 0,917 & 0,671 & 1,054 & 0,843 \\
+        Wang 8.1 (teste B) & 5×2 + atan2 & 1,434 & 0,815 & 1,093 & 0,924 \\
+         & 5×3, saída 3 & 1,482 & 1,233 & 1,539 & 1,283 \\
+         & 5×3 + atan2 & 1,506 & 1,272 & 1,532 & 1,297 \\
+        Wang 3.2 (teste C) & 5×2 + atan2 & 1,738 & 0,991 & 0,830 & 0,565 \\
+         & 5×3, saída 3 & 1,098 & 0,773 & 1,108 & 0,697 \\
+         & 5×3 + atan2 & 1,099 & 0,773 & 1,082 & 0,687 \\
+        \bottomrule
+    \end{tabular}
+    \par\footnotesize Nota: deslocamentos de $v_y$ removidos: 0,31~m/s (Wang 3.1), 0,37~m/s (Wang 8.1) e 0,31~m/s (Wang 3.2).
+    \fonte{Elaboração própria.}
+\end{table}

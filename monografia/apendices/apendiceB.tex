@@ -1,0 +1,13 @@
+\apendice{Equação de $\beta$ de um modelo 5×3 típico}\label{apen:equacao_beta}
+
+Este apêndice apresenta a equação da terceira saída de um modelo 5×3 de RMSE mediano na pista Wang 3.2, o mesmo modelo da \autoref{fig:sobreposicao} (tentativa 12, semente 2038). O RMSE de $\beta$ desse modelo é de 2,49° na pista de treino, 0,86° na Wang 2.2, 0,83° na Wang 3.1, 1,51° na Wang 8.1 e 1,10° na Wang 3.2.
+
+Os sete genes da saída 3 foram expandidos algebricamente, o que resulta em 16 monômios. Os monômios com coeficiente de módulo inferior a $10^{-4}$ (um termo em $a_y$ com atraso de 61 amostras e seis produtos de três variáveis) foram descartados, por não alterarem a saída de forma perceptível. Com $\beta$ em graus, $a_y$ em m/s², $\omega_r$ e $\dot\psi$ em rad/s, e $x[k-n]$ o valor de $x$ há $n$ amostras (200~Hz), a equação resultante é
+\begin{align}
+    \beta[k] \approx{}& 1{,}0113\,\beta[k-1] - 0{,}0045\,\beta[k-9] - 0{,}0027\,\beta[k-32] - 0{,}0045\,\beta[k-40] \nonumber\\
+    &+ 0{,}0024\,a_y[k-1] + 0{,}0045\,a_y[k-3] + 0{,}0027\,a_y[k-6] \nonumber\\
+    &+ 0{,}0032\,\dot\psi[k-1]\,\omega_r[k-1] - 0{,}0008.
+    \label{eq:beta_modelo_tipico}
+\end{align}
+
+A soma dos coeficientes de $\beta$ é 0,9997, de modo que o modelo se comporta como um integrador com pequeno vazamento, como discutido na \autoref{sec:estrutura}. A soma dos coeficientes lineares de $a_y$ é 0,0095~graus por m/s², próxima da mediana de 0,0104 dos 28 modelos. O termo da taxa de guinada aparece apenas no produto $\dot\psi\,\omega_r$, e não como termo linear.

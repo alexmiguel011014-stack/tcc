@@ -1,0 +1,20 @@
+\begin{table}[htbp]
+    \centering
+    \caption{Pistas da base de dados, papel no experimento e escala do ângulo de deriva de referência.}
+    \label{tab:pistas}
+    \footnotesize
+    \resizebox{\textwidth}{!}{%
+    \begin{tabular}{llrrrrrr}
+        \toprule
+        \textbf{Pista} & \textbf{Papel} & \textbf{Amostras} & \textbf{Duração [s]} & $\bar\beta$ [°] & $\sigma_\beta$ [°] & \multicolumn{2}{c}{RMSE de linha de base [°]} \\
+        \midrule
+        Wang 2.1 (treino) & treinamento & 41846 & 209,2 & $-$1,40 & 2,50 & 2,86 & 2,50 \\
+        Wang 2.2 (validação) & validação (aprovação) & 7846 & 39,2 & $-$1,62 & 2,48 & 2,96 & 2,49 \\
+        Wang 3.1 (teste A) & teste & 12646 & 63,2 & $-$0,90 & 2,05 & 2,24 & 2,11 \\
+        Wang 8.1 (teste B) & teste & 5846 & 29,2 & $-$1,65 & 4,21 & 4,52 & 4,21 \\
+        Wang 3.2 (teste C) & teste & 7846 & 39,2 & $-$1,34 & 2,70 & 3,02 & 2,70 \\
+        \bottomrule
+    \end{tabular}}
+    \par\footnotesize Nota: amostras após descartar o maior atraso do modelo (200~Hz). Linhas de base: $\hat\beta = 0$ e $\hat\beta$ = média de $\beta$ na pista de treino.
+    \fonte{Elaboração própria.}
+\end{table}

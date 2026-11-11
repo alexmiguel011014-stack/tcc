@@ -1,0 +1,36 @@
+% Modelo de bicicleta com o ângulo de deriva (redesenho vetorial da figura da IC).
+% Símbolos iguais aos do texto: v_x, v_y, V, beta, delta, alpha_f, alpha_r, psi-ponto, l_f, l_r, CG.
+\begin{tikzpicture}[>={Stealth[length=2.4mm]}, font=\small,
+    roda/.style={draw, fill=black!65, rounded corners=1pt, minimum width=14mm, minimum height=4.5mm}]
+  % eixos do veículo
+  \draw[dashed, black!50] (-5.2,0) -- (5.6,0) node[right, black] {$x$};
+  \draw[dashed, black!50] (0,-1.2) -- (0,1.45) node[above left, black] {$y$};
+  % rodas: traseira alinhada ao eixo, dianteira esterçada de delta
+  \node[roda] (rr) at (-3.6,0) {};
+  \node[roda, rotate=22] (rf) at (3.6,0) {};
+  \draw (-3.6,0) -- (3.6,0);
+  % distâncias ao CG
+  \draw[<->] (-3.6,-0.85) -- node[below] {$l_r$} (0,-0.85);
+  \draw[<->] (0,-0.85) -- node[below] {$l_f$} (3.6,-0.85);
+  \draw[black!40] (-3.6,-0.3) -- (-3.6,-1.0);
+  \draw[black!40] (3.6,-0.3) -- (3.6,-1.0);
+  % CG e velocidades
+  \fill (0,0) circle (1.6pt) node[below left] {CG};
+  \draw[->, very thick] (0,0) -- (2.2,0) node[below right] {$v_x$};
+  \draw[->, very thick] (0,0) -- (0,0.95) node[left] {$v_y$};
+  \draw[->, very thick] (0,0) -- (2.2,0.95) node[above right] {$V$};
+  \draw[dotted] (2.2,0) -- (2.2,0.95);
+  \draw[dotted] (0,0.95) -- (2.2,0.95);
+  \draw (1.1,0) arc[start angle=0, end angle=23.4, radius=1.1];
+  \node at (1.35,0.25) {$\beta$};
+  % esterçamento e ângulos de deriva dos pneus
+  \draw[black!60] (3.6,0) -- ++(22:1.6);
+  \draw (4.5,0) arc[start angle=0, end angle=22, radius=0.9] node[midway, right] {$\delta$};
+  \draw[->] (3.6,0) -- ++(40:1.5) node[above] {$v_f$};
+  \draw (3.6,0) ++(22:1.2) arc[start angle=22, end angle=40, radius=1.2] node[midway, above left] {$\alpha_f$};
+  \draw[->] (-3.6,0) -- ++(14:1.5) node[above] {$v_r$};
+  \draw (-2.6,0) arc[start angle=0, end angle=14, radius=1.0] node[midway, right] {$\alpha_r$};
+  % taxa de guinada
+  \draw[->, thick] (-0.75,1.9) arc[start angle=200, end angle=-20, radius=0.8];
+  \node at (1.05,2.55) {$\dot\psi$};
+\end{tikzpicture}

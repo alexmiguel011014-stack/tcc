@@ -1,0 +1,29 @@
+\begin{table}[htbp]
+    \centering
+    \caption{Parâmetros do MGGP (configuração T48 da IC) e do protocolo de treinamento.}
+    \label{tab:parametros}
+    \small
+    \begin{tabular}{ll}
+        \toprule
+        \textbf{Parâmetro} & \textbf{Valor} \\
+        \midrule
+        Número de gerações & 300 \\
+        Tamanho da população & 300 \\
+        Atrasos (\textit{nDelays}) & [1, 2, 5, 10, 25, 50] \\
+        Termos por saída (\textit{nTerms}) & 7 \\
+        Profundidade máxima (\textit{maxHeight}) & 6 \\
+        Regime de avaliação no treinamento & \textit{Multi-shooting} ($K = 300$) \\
+        Regime de avaliação no teste & \textit{Free-run} \\
+        Taxa de mutação & 0,3 \\
+        Taxa de cruzamento & 0,8 \\
+        Elitismo & 10\% \\
+        Operadores & $+$, $-$, $\times$ \\
+        Aptidão & média simples do RMSE das saídas \\
+        Unidade de $\beta$ no braço 5×3 & graus \\
+        Execuções independentes por braço & 30 (semente $= 2026 +$ tentativa) \\
+        Critério de aprovação & $0 < \mathrm{RMSE}(\text{Wang 2.2}, \textit{Free-run}) < 100$ \\
+        Regra de fracasso & 5 reprovações seguidas \\
+        \bottomrule
+    \end{tabular}
+    \fonte{Elaboração própria.}
+\end{table}
