@@ -32,7 +32,8 @@ Se o PC novo tiver menos de 28, o verificador avisa — não deixe lançar assim
 
 ## 3. Configurar e lançar (duas execuções em paralelo)
 Abra **dois** notebooks/kernels do `notebooks/E2_treinamento_validacao.ipynb`, ambos com a raiz do repositório
-como pasta de trabalho. Só muda a célula 1 (Configuração):
+como pasta de trabalho. Atalho: na célula 1 (Configuração) use `PERFIL = "5x3"` no kernel A e `PERFIL = "5x1"` no
+kernel B — ele já ajusta `ARMS` e `WORKERS` como na tabela abaixo (o resto da célula fica como está):
 
 | | Kernel A (completar o 5x3) | Kernel B (treinar o 5x1) |
 |---|---|---|
