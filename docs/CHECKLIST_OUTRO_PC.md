@@ -56,7 +56,8 @@ $env:E2_PERFIL = "5x3"; uv run --with nbconvert --with ipykernel jupyter nbconve
 ```powershell
 $env:E2_PERFIL = "5x1"; uv run --with nbconvert --with ipykernel jupyter nbconvert --to notebook --execute notebooks/E2_treinamento_validacao.ipynb --output _out_5x1.ipynb --ExecutePreprocessor.timeout=-1
 ```
-- Não há painel ao vivo: acompanhe por `results/e2/t48/<braço>/attempts/attempt_XXX/log.txt` e `attempts.csv`.
+- Não há painel do Jupyter, mas há um acompanhante: num terminal separado rode `python scripts/acompanhar.py`
+  (geração N/300, melhor/média, tempo, aprovados por braço; atualiza a cada 5 s, Ctrl+C sai).
 - Feche o terminal e o treino morre (os workers se encerram sozinhos em ~5 s); rodar o mesmo comando retoma do `attempts.csv`.
 - `notebooks/_out_*.ipynb` fica fora do git (tem saídas derivadas dos dados).
 - Uso de CPU: 5x3 usa 2 núcleos (só 2 tentativas) e o 5x1 usa núcleos−2; juntos ocupam 100 % **enquanto o 5x3 roda**
