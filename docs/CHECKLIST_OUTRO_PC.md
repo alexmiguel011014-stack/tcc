@@ -47,6 +47,21 @@ esperando ~8 h à toa.
 
 Não use `GENERATIONS`/`POPULATION`/`MAX_SAMPLES` (só para teste rápido) — deixe `None`.
 
+### 3b. Alternativa: rodar direto no terminal (sem abrir o Jupyter)
+Dois terminais PowerShell, ambos na raiz do repositório (a variável vale só para o terminal onde foi definida):
+
+```powershell
+$env:E2_PERFIL = "5x3"; uv run --with nbconvert --with ipykernel jupyter nbconvert --to notebook --execute notebooks/E2_treinamento_validacao.ipynb --output _out_5x3.ipynb --ExecutePreprocessor.timeout=-1
+```
+```powershell
+$env:E2_PERFIL = "5x1"; uv run --with nbconvert --with ipykernel jupyter nbconvert --to notebook --execute notebooks/E2_treinamento_validacao.ipynb --output _out_5x1.ipynb --ExecutePreprocessor.timeout=-1
+```
+- Não há painel ao vivo: acompanhe por `results/e2/t48/<braço>/attempts/attempt_XXX/log.txt` e `attempts.csv`.
+- Feche o terminal e o treino morre (os workers se encerram sozinhos em ~5 s); rodar o mesmo comando retoma do `attempts.csv`.
+- `notebooks/_out_*.ipynb` fica fora do git (tem saídas derivadas dos dados).
+- Uso de CPU: 5x3 usa 2 núcleos (só 2 tentativas) e o 5x1 usa núcleos−2; juntos ocupam 100 % **enquanto o 5x3 roda**
+  (~5–8 h). Depois disso 2 núcleos ficam livres.
+
 ## 4. Conferir nos primeiros minutos
 - [ ] A célula de preflight imprime `dataset OK` e `lib OK: src/ idêntica ao MGGP da IC @7514bfb`.
 - [ ] Kernel A anuncia `[5x3] RUNNING — 28/30 aprovados` e `leva de 2 tentativa(s)`.
