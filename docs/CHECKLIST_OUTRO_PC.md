@@ -30,42 +30,37 @@ Ele confere, e sai com `BLOQUEANTE` se algo estiver errado:
 O item 6 é o que decide quantas tentativas o 5x3 vai lançar: com 28/30 ele lança **exatamente 2**.
 Se o PC novo tiver menos de 28, o verificador avisa — não deixe lançar assim, ele refaria o que já existe.
 
-## 3. Configurar e lançar (duas execuções em paralelo)
-Abra **dois** notebooks/kernels do `notebooks/E2_treinamento_validacao.ipynb`, ambos com a raiz do repositório
-como pasta de trabalho. Atalho: na célula 1 (Configuração) use `PERFIL = "5x3"` no kernel A e `PERFIL = "5x1"` no
-kernel B — ele já ajusta `ARMS` e `WORKERS` como na tabela abaixo (o resto da célula fica como está):
+## 3. Lançar (um kernel só, os dois braços juntos)
+O notebook agora roda **todos os braços de `ARMS` ao mesmo tempo**, dividindo as `WORKERS` vagas de CPU
+(padrão: todos os núcleos). Não precisa trocar de braço nem abrir dois kernels:
 
-| | Kernel A (completar o 5x3) | Kernel B (treinar o 5x1) |
-|---|---|---|
-| `ARMS` | `["5x3"]` | `["5x1"]` |
-| `RUNS` | `30` | `30` (ou `RUNS_POR_BRACO = {"5x1": 10}` para uma leva só) |
-| `WORKERS` | `2` | núcleos lógicos − 2 (ex.: 10 num PC de 12) |
-| `CONFIG`, `SEED`, `GATE_MAX`, `BETA_UNIT` | não mexer (`"t48"`, `2026`, `100.0`, `"deg"`) | idem |
+- `ARMS = ["5x3", "5x1"]` (padrão): o 5x3 pega 2 vagas (só faltam 2 modelos) e o 5x1 pega o resto; quando o 5x3
+  termina, as vagas dele passam sozinhas para o 5x1. A ordem em `ARMS` é a prioridade.
+- `RUNS = 30` (ou `RUNS_POR_BRACO = {"5x1": 10}` para uma leva só). `CONFIG`, `SEED`, `GATE_MAX`, `BETA_UNIT`: não mexer.
+- Não use `GENERATIONS`/`POPULATION`/`MAX_SAMPLES` (só para teste rápido) — deixe `None`.
 
-Por que dois kernels: o notebook roda os braços em sequência; o 5x3 só usa 2 núcleos, então o 5x1 ficaria
-esperando ~8 h à toa.
+**Jupyter (VS Code):** abra `notebooks/E2_treinamento_validacao.ipynb`, kernel do `.venv`, **Run All**.
 
-Não use `GENERATIONS`/`POPULATION`/`MAX_SAMPLES` (só para teste rápido) — deixe `None`.
-
-### 3b. Alternativa: rodar direto no terminal (sem abrir o Jupyter)
-Dois terminais PowerShell, ambos na raiz do repositório (a variável vale só para o terminal onde foi definida):
-
+**Terminal (sem Jupyter):**
 ```powershell
-$env:E2_PERFIL = "5x3"; uv run --with nbconvert --with ipykernel jupyter nbconvert --to notebook --execute notebooks/E2_treinamento_validacao.ipynb --output _out_5x3.ipynb --ExecutePreprocessor.timeout=-1
+python -m jupyter nbconvert --to notebook --execute notebooks/E2_treinamento_validacao.ipynb --output _out_campanha.ipynb --ExecutePreprocessor.timeout=-1
 ```
-```powershell
-$env:E2_PERFIL = "5x1"; uv run --with nbconvert --with ipykernel jupyter nbconvert --to notebook --execute notebooks/E2_treinamento_validacao.ipynb --output _out_5x1.ipynb --ExecutePreprocessor.timeout=-1
-```
-- Não há painel do Jupyter, mas há um acompanhante: num terminal separado rode `python scripts/acompanhar.py`
-  (geração N/300, melhor/média, tempo, aprovados por braço; atualiza a cada 5 s, Ctrl+C sai).
-- Feche o terminal e o treino morre (os workers se encerram sozinhos em ~5 s); rodar o mesmo comando retoma do `attempts.csv`.
+- Num terminal não há painel do Jupyter: use `python scripts/acompanhar.py` em outro terminal.
+- Fechar o terminal/VS Code mata o treino (os workers se encerram sozinhos em ~5 s); rodar de novo retoma do `attempts.csv`.
 - `notebooks/_out_*.ipynb` fica fora do git (tem saídas derivadas dos dados).
-- Uso de CPU: 5x3 usa 2 núcleos (só 2 tentativas) e o 5x1 usa núcleos−2; juntos ocupam 100 % **enquanto o 5x3 roda**
-  (~5–8 h). Depois disso 2 núcleos ficam livres.
+- O atalho `PERFIL = "5x3"` / `"5x1"` (ou `E2_PERFIL`) continua existindo, para rodar um braço só com vagas fixas.
+
+**Regras que a campanha aplica sozinha (testadas):**
+- Cada tentativa roda num **processo novo** que morre ao terminar (RAM devolvida; nada passa de uma para a outra).
+- Tentativa **reprovada** = RMSE da Wang 2.2 em Free-Run infinito, NaN, ≤ 0 ou ≥ 100, ou crash.
+- **5 falhas seguidas ⇒ FRACASSO do braço** (para de lançar e mata o que está rodando). Uma aprovação **zera** o
+  contador: 4 falhas + 1 aprovação + 4 falhas = continua; 4 + 1 + 5 = para. A contagem segue a ordem em que as
+  tentativas terminam e continua entre retomadas (via `attempts.csv`).
+- Worker morto à força (ex.: falta de memória) não conta como falha: a leva é relançada (até 3 vezes seguidas).
 
 ## 4. Conferir nos primeiros minutos
 - [ ] A célula de preflight imprime `dataset OK` e `lib OK: src/ idêntica ao MGGP da IC @7514bfb`.
-- [ ] Kernel A anuncia `[5x3] RUNNING — 28/30 aprovados` e `leva de 2 tentativa(s)`.
+- [ ] Aparece `[5x3] RUNNING — 28/30 aprovados` e `leva de 2 tentativa(s)`, e `[5x1] RUNNING — 0/30`.
 - [ ] O painel mostra `geração N/300` andando; log em `results/e2/t48/<braço>/attempts/attempt_XXX/log.txt`.
 - [ ] Cada `attempt_XXX/log.txt` começa com `System Mode: MIMO … N° Outputs: 3` (5x3) ou `System Mode: MISO … N° Outputs: 1` (5x1).
 
